@@ -73,6 +73,28 @@ const brandMark = () => h('div', { class: 'brand' }, svg(LOGO), h('span', { clas
 
 async function logout() { await sb.auth.signOut(); renderLogin(); }
 
+// A readable help window for problems that need the person to change a phone setting.
+function helpDialog(title, intro, steps = []) {
+  dlg.replaceChildren(
+    h('div', { class: 'help' },
+      h('div', { class: 'help-icon' }, svg(ICONS.bellOff)),
+      h('h1', {}, title),
+      intro ? h('p', { class: 'help-intro' }, intro) : null,
+      steps.length ? h('ol', { class: 'help-steps' }, steps.map(s => h('li', {}, s))) : null,
+      h('button', { class: 'primary block', onclick: () => dlg.close() }, 'Rendben')));
+  dlg.showModal();
+}
+
+// "Registration failed - push service error": Chrome could not get a registration from Google's push
+// service. On Xiaomi/Redmi (HyperOS) that is almost always background/battery restrictions.
+const PUSH_SERVICE_HELP = [
+  'Beállítások → Alkalmazások → Alkalmazások kezelése → Chrome: Automatikus indítás bekapcsolva.',
+  'Ugyanott: Akkumulátorkímélő → Nincs korlátozás.',
+  'Ugyanezt a kettőt a Google Play-szolgáltatások alkalmazásnál is.',
+  'Play Áruház: frissítsd a Chrome-ot és a Google Play-szolgáltatásokat.',
+  'Zárd be a Spórát (húzd el a legutóbbi appok közül), nyisd meg újra, és nyomd meg a csengőt.',
+];
+
 // Header bell: daily reminders at 10:00 and 22:00 on this device.
 async function toggleReminders() {
   try {
@@ -83,18 +105,24 @@ async function toggleReminders() {
       toast('Emlékeztetők kikapcsolva');
     } else {
       const blocker = pushBlocker();
-      if (blocker) { log('push', 'blocked', { step: 'blocked', reason: blocker, env: await environment() }); toast(blocker, 6000); return; }
+      if (blocker) {
+        log('push', 'blocked', { step: 'blocked', reason: blocker, env: await environment() });
+        helpDialog('Az értesítés itt nem kapcsolható be', blocker);
+        return;
+      }
       await enablePush(sb);
       S.pushOn = true;
       toast('Emlékeztetők bekapcsolva: minden nap 10:00 és 22:00');
     }
   } catch (e) {
-    // "Registration failed - push service error": the browser could not reach its own push server
-    // (Brave with Google push off, no Google services on the phone, battery saver, blocked network).
     const pushServiceDown = e?.name === 'AbortError' || /push service/i.test(e?.message ?? '');
-    toast(pushServiceDown
-      ? 'A böngésző nem érte el az értesítési szerverét. Braveben: Beállítások → Adatvédelem → „Google-szolgáltatások használata a push üzenetekhez” be. Androidon: a Chrome értesítései legyenek engedélyezve, és a Google Play-szolgáltatások frissek. Utána próbáld újra.'
-      : (e?.message ?? String(e)), 9000);
+    if (pushServiceDown) {
+      helpDialog('Nem sikerült bekapcsolni az értesítést',
+        'A telefon nem érte el a Google értesítési szerverét. Xiaomi / Redmi telefonon ezt általában az energiatakarékos beállítások okozzák:',
+        PUSH_SERVICE_HELP);
+    } else {
+      helpDialog('Nem sikerült bekapcsolni az értesítést', e?.message ?? String(e));
+    }
   }
   render();
 }
