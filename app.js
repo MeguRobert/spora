@@ -125,7 +125,7 @@ function render() {
   app.replaceChildren(
     h('div', { class: 'row' }, h('h1', { class: 'grow' }, 'Spóra'),
       h('button', { class: 'link', onclick: async () => { await sb.auth.signOut(); renderLogin(); } }, 'Kilépés')),
-    ...body.flat(Infinity),
+    ...body.flat(Infinity).filter(c => c != null && c !== false),
     h('nav', { class: 'tabs' }, tab('log', 'Napló'), tab('month', 'Hónap'), tab('import', 'Import')));
   if (S.tab === 'log') document.getElementById('quick')?.focus({ preventScroll: true });
 }
