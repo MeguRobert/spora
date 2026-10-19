@@ -17,6 +17,8 @@ export const ICONS = {
   month: icon('<path d="M5 20V11M12 20V4M19 20v-6"/>'),
   import: icon('<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>'),
   logout: icon('<path d="M14 4h5v16h-5M10 8l-4 4 4 4M6 12h10"/>'),
+  bell: icon('<path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/>'),
+  bellOff: icon('<path d="M6 16V11a6 6 0 0 1 9.5-4.9M18 11v5l1.5 2H8"/><path d="M10 20.5a2 2 0 0 0 4 0M3 3l18 18"/>'),
   prev: icon('<path d="M15 6l-6 6 6 6"/>'),
   next: icon('<path d="M9 6l6 6-6 6"/>'),
 };

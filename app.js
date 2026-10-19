@@ -2,6 +2,7 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 import { parseEntry, parseChat, parseAmount, suggestCategory, ruleKeyword, localIso } from './parse.js';
 import { LOGO, ICONS, categoryLook, svg } from './brand.js';
+import { registerWorker, currentSubscription, enablePush, disablePush, pushBlocker } from './push.js';
 
 const app = document.getElementById('app');
 const dlg = document.getElementById('edit');
@@ -50,10 +51,10 @@ const catName = id => S.categories.find(c => c.id === id)?.name ?? 'Nincs kateg�
 const member = email => S.members.find(m => m.email.toLowerCase() === (email ?? '').toLowerCase());
 const toId = v => (v === '' || v == null ? null : Number(v));
 
-function toast(msg) {
+function toast(msg, ms = 2200) {
   const t = h('div', { class: 'toast' }, msg);
   document.body.append(t);
-  setTimeout(() => t.remove(), 2200);
+  setTimeout(() => t.remove(), ms);
 }
 
 function categorySelect(value) {
@@ -70,6 +71,27 @@ const sumOf = list => list.reduce((a, s) => a + Number(s.amount), 0);
 const brandMark = () => h('div', { class: 'brand' }, svg(LOGO), h('span', { class: 'wordmark' }, 'spóra'));
 
 async function logout() { await sb.auth.signOut(); renderLogin(); }
+
+// Header bell: daily reminders at 10:00 and 22:00 on this device.
+async function toggleReminders() {
+  try {
+    if (S.pushOn) {
+      if (!confirm('Kikapcsolod a napi emlékeztetőket ezen a készüléken?')) return;
+      await disablePush(sb);
+      S.pushOn = false;
+      toast('Emlékeztetők kikapcsolva');
+    } else {
+      const blocker = pushBlocker();
+      if (blocker) { toast(blocker, 6000); return; }
+      await enablePush(sb);
+      S.pushOn = true;
+      toast('Emlékeztetők bekapcsolva: minden nap 10:00 és 22:00');
+    }
+  } catch (e) {
+    toast(e.message ?? String(e), 6000);
+  }
+  render();
+}
 
 // Simple branded page for setup / no-access / error states.
 function notice(...children) {
@@ -156,6 +178,11 @@ function render() {
   app.replaceChildren(
     h('header', { class: 'top' }, brandMark(),
       h('span', { class: 'me' }, member(S.user?.email)?.display_name ?? ''),
+      h('button', {
+        class: 'icon-btn' + (S.pushOn ? ' on' : ''), onclick: toggleReminders,
+        title: S.pushOn ? 'Napi emlékeztető: be' : 'Napi emlékeztető bekapcsolása',
+        'aria-label': S.pushOn ? 'Napi emlékeztető: be' : 'Napi emlékeztető bekapcsolása',
+      }, svg(S.pushOn ? ICONS.bell : ICONS.bellOff)),
       h('button', { class: 'icon-btn', title: 'Kilépés', 'aria-label': 'Kilépés', onclick: logout }, svg(ICONS.logout))),
     ...body.flat(Infinity).filter(c => c != null && c !== false),
     h('nav', { class: 'tabs' }, tab('log', 'Napló'), tab('month', 'Hónap'), tab('import', 'Import')));
@@ -379,6 +406,8 @@ async function start() {
   const { data: { session } } = await sb.auth.getSession();
   if (!session) return renderLogin();
   S.user = session.user;
+  registerWorker();
+  S.pushOn = !!(await currentSubscription().catch(() => null));
   try {
     await loadRefs();
     if (!member(S.user.email)) {

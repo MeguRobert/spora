@@ -150,3 +150,4 @@ dialog h1 { font-family: "Fraunces", Georgia, serif; font-size: 22px; margin: 0 
   background: var(--text); color: var(--bg); padding: 9px 16px; border-radius: 99px; font-size: 14px;
   max-width: calc(100vw - 32px); box-shadow: var(--shadow);
 }
+.icon-btn.on { color: var(--brand); }

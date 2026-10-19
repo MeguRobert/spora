@@ -18,6 +18,11 @@ Fix a wrong category once and the app remembers that word next time.
 | Keepalive | `.github/workflows/supabase-keepalive.yml` calls `ping()` daily so the free project never pauses (secrets `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`) |
 | Repo | `MeguRobert/spora` — personal account; this clone uses `~/.ssh/id_ed25519_meguRobert` via `core.sshCommand` |
 
+| Reminders | Push at 10:00 and 22:00 Bucharest time: pg_cron job `spora-daily-reminder` (07,08,19,20 UTC) → edge function `supabase/functions/daily-reminder` → every row in `push_subscriptions`. Function secrets: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `CRON_SECRET`. Setup SQL: `supabase/push.sql` |
+
+Reminders on a phone: tap the bell in the header once per device. iPhone needs iOS 16.4+ and the app
+opened from its home-screen icon (Safari tabs cannot receive push).
+
 Access: only emails in the `allowed_emails` table can read or write anything (row-level security);
 the publishable key alone can call `ping()` and nothing else. Email confirmation is off.
 
