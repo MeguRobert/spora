@@ -70,7 +70,7 @@ select k, (select id from categories where name = c) from (values
   ('profi', 'Élelmiszer'), ('penny', 'Élelmiszer'), ('carrefour', 'Élelmiszer'), ('auchan', 'Élelmiszer'),
   ('mega image', 'Élelmiszer'), ('piac', 'Élelmiszer'), ('hus', 'Élelmiszer'), ('zoldseg', 'Élelmiszer'),
   ('gyumolcs', 'Élelmiszer'), ('tojas', 'Élelmiszer'), ('kisbolt', 'Élelmiszer'), ('moza', 'Élelmiszer'),
-  ('placinta', 'Élelmiszer'), ('kave', 'Élelmiszer'), ('zuzu', 'Élelmiszer'),
+  ('placinta', 'Élelmiszer'), ('kave', 'Élelmiszer'), ('zuzu', 'Élelmiszer'), ('szenya', 'Élelmiszer'), ('szendvics', 'Élelmiszer'),
   ('rovignetta', 'Autó'), ('analizis', 'Egészség'), ('virag', 'Ajándék'), ('foci', 'Étterem & szórakozás'),
   ('benzin', 'Üzemanyag'), ('motorina', 'Üzemanyag'), ('diesel', 'Üzemanyag'), ('omv', 'Üzemanyag'),
   ('petrom', 'Üzemanyag'), ('mol', 'Üzemanyag'), ('lukoil', 'Üzemanyag'), ('rompetrol', 'Üzemanyag'),
