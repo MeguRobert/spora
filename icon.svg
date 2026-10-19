@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#1f6f5c"/>
+  <path d="M256 104 96 236h44v168h232V236h44z" fill="#f6f4ef"/>
+  <text x="256" y="368" font-family="Arial, sans-serif" font-size="150" font-weight="700" fill="#1f6f5c" text-anchor="middle">lei</text>
+</svg>

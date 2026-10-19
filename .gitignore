@@ -1,0 +1,6 @@
+node_modules/
+supabase/.temp/
+*.log
+# Exported Messenger text holds private spending data — never commit it.
+*.txt
+!.github/last-keepalive.txt

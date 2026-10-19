@@ -1,0 +1,61 @@
+name: Supabase keepalive
+
+# A free-tier Supabase project pauses after ~1 week without database activity.
+# This runs one real query a day (the ping() function — every table is closed to the
+# public key) so a quiet week never pauses it. Same arrangement as songbook-app.
+
+on:
+  schedule:
+    # 07:23 UTC daily — off the hour, which is GitHub's most delayed cron slot.
+    - cron: '23 7 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    name: Query the database
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call ping() through PostgREST
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_PUBLISHABLE_KEY:-}" ]; then
+            echo "::error::SUPABASE_URL or SUPABASE_PUBLISHABLE_KEY secret is not set."
+            exit 1
+          fi
+          code=$(curl -sS -o /tmp/body.txt -w '%{http_code}' -X POST \
+            -H "apikey: ${SUPABASE_PUBLISHABLE_KEY}" -H "Content-Type: application/json" -d '{}' \
+            "${SUPABASE_URL}/rest/v1/rpc/ping")
+          echo "HTTP ${code}: $(head -c 200 /tmp/body.txt)"
+          case "${code}" in
+            200) echo "::notice::Project is awake." ;;
+            540) echo "::error::Project is PAUSED — restore it once from the Supabase dashboard."; exit 1 ;;
+            *)   echo "::error::Unexpected status ${code}."; exit 1 ;;
+          esac
+
+  keep-workflow-enabled:
+    name: Keep scheduled workflows from being auto-disabled
+    runs-on: ubuntu-latest
+    # GitHub disables scheduled workflows in a public repo after 60 days without a push;
+    # workflow runs do not count. One dated commit a month prevents that.
+    if: github.event_name == 'schedule' && github.event.repository.private == false
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Touch the timestamp on the 1st of the month
+        run: |
+          set -euo pipefail
+          [ "$(date -u +%d)" = "01" ] || { echo "Not the 1st; nothing to do."; exit 0; }
+          date -u +'%Y-%m-%dT%H:%M:%SZ' > .github/last-keepalive.txt
+          git config user.name  'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add .github/last-keepalive.txt
+          git diff --cached --quiet && exit 0
+          git commit -m 'chore: keep scheduled workflows enabled'
+          git push
