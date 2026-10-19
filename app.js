@@ -34,7 +34,7 @@ const money = n => Number(n).toLocaleString('hu-HU', { minimumFractionDigits: 2,
 const amountText = n => (n == null ? '' : String(n).replace('.', ','));
 const catName = id => S.categories.find(c => c.id === id)?.name ?? 'Nincs kategória';
 const member = email => S.members.find(m => m.email.toLowerCase() === (email ?? '').toLowerCase());
-const initial = email => (member(email)?.display_name ?? email ?? '?').slice(0, 1).toUpperCase();
+const initial = email => (member(email)?.display_name ?? email ?? '?').slice(0, 2);
 const toId = v => (v === '' || v == null ? null : Number(v));
 
 function toast(msg) {

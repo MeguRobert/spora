@@ -55,7 +55,7 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 8px 0 4px;
 .item .amt { font-weight: 600; font-variant-numeric: tabular-nums; }
 .chip { font-size: 12px; padding: 2px 8px; border-radius: 99px; background: var(--bar); white-space: nowrap; }
 .who {
-  width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; flex: none;
+  min-width: 28px; height: 24px; padding: 0 5px; border-radius: 12px; display: grid; place-items: center; flex: none;
   font-size: 12px; font-weight: 700; background: var(--line);
 }
 
