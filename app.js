@@ -240,7 +240,7 @@ function renderImport() {
   const parse = () => {
     S.importRows = parseChat(S.importText).map(r => ({
       ...r, category_id: suggestCategory(r.description, S.rules), on: r.problems.length === 0,
-    }));
+    })).map(r => ({ ...r, suggested: r.category_id }));
     render();
   };
   const rows = S.importRows.map(r => {
@@ -263,6 +263,8 @@ function renderImport() {
       description: r.description.trim(), amount: r.amount, spent_on: r.date, category_id: r.category_id,
     })));
     if (error) { toast(error.message); return; }
+    // Categories picked or corrected during import teach the rules, same as the quick entry does.
+    for (const r of chosen) await learn(r.description, r.category_id, r.suggested);
     toast(`${chosen.length} költés importálva`);
     S.importText = ''; S.importRows = [];
     await loadMonth();
