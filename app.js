@@ -1,6 +1,7 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 import { parseEntry, parseChat, parseAmount, suggestCategory, ruleKeyword, localIso } from './parse.js';
+import { LOGO, ICONS, categoryLook, svg } from './brand.js';
 
 const app = document.getElementById('app');
 const dlg = document.getElementById('edit');
@@ -47,7 +48,6 @@ function dateHint(input) {
 const amountText = n => (n == null ? '' : String(n).replace('.', ','));
 const catName = id => S.categories.find(c => c.id === id)?.name ?? 'Nincs kategória';
 const member = email => S.members.find(m => m.email.toLowerCase() === (email ?? '').toLowerCase());
-const initial = email => (member(email)?.display_name ?? email ?? '?').slice(0, 2);
 const toId = v => (v === '' || v == null ? null : Number(v));
 
 function toast(msg) {
@@ -59,7 +59,21 @@ function toast(msg) {
 function categorySelect(value) {
   return h('select', {},
     h('option', { value: '' }, '— kategória —'),
-    S.categories.map(c => h('option', { value: c.id, selected: c.id === value }, c.name)));
+    S.categories.map(c => h('option', { value: c.id, selected: c.id === value }, `${categoryLook(c.name).emoji}  ${c.name}`)));
+}
+
+const catIcon = id => {
+  const { emoji, color } = categoryLook(catName(id));
+  return h('span', { class: 'cat-icon', style: `--cat:${color}` }, emoji);
+};
+const sumOf = list => list.reduce((a, s) => a + Number(s.amount), 0);
+const brandMark = () => h('div', { class: 'brand' }, svg(LOGO), h('span', { class: 'wordmark' }, 'spóra'));
+
+async function logout() { await sb.auth.signOut(); renderLogin(); }
+
+// Simple branded page for setup / no-access / error states.
+function notice(...children) {
+  app.replaceChildren(h('header', { class: 'top' }, brandMark()), h('div', { class: 'card' }, ...children));
 }
 
 function monthRange(month) {
@@ -107,9 +121,8 @@ async function learn(description, categoryId, suggestedId) {
 
 // ---------- screens ----------
 function renderSetup() {
-  app.replaceChildren(h('h1', {}, 'Spóra'), h('div', { class: 'card' },
-    h('p', {}, 'Még nincs beállítva a Supabase kapcsolat.'),
-    h('p', { class: 'muted' }, 'Írd be a config.js fájlba a SUPABASE_URL és SUPABASE_ANON_KEY értékeket (lásd README.md).')));
+  notice(h('p', {}, 'Még nincs beállítva a Supabase kapcsolat.'),
+    h('p', { class: 'muted' }, 'Írd be a config.js fájlba a SUPABASE_URL és SUPABASE_ANON_KEY értékeket (lásd README.md).'));
 }
 
 function renderLogin(message) {
@@ -124,20 +137,26 @@ function renderLogin(message) {
     if (!data.session) { msg.textContent = 'Nézd meg az emailed és erősítsd meg a regisztrációt, aztán lépj be.'; return; }
     start();
   };
-  app.replaceChildren(h('h1', {}, 'Spóra'), h('div', { class: 'card' },
-    h('label', {}, 'Email'), email, h('label', {}, 'Jelszó'), pass,
-    h('div', { class: 'row', style: 'margin-top:12px' },
-      h('button', { class: 'primary grow', onclick: () => go(false) }, 'Belépés'),
-      h('button', { onclick: () => go(true) }, 'Első regisztráció')),
-    msg));
+  pass.onkeydown = e => { if (e.key === 'Enter') go(false); };
+  app.replaceChildren(h('div', { class: 'login' },
+    h('div', { class: 'login-hero' }, svg(LOGO), h('div', { class: 'wordmark' }, 'spóra'),
+      h('p', { class: 'tagline' }, 'Minden lej a helyén.')),
+    h('div', { class: 'card' },
+      h('label', { style: 'margin-top:0' }, 'Email'), email, h('label', {}, 'Jelszó'), pass,
+      h('button', { class: 'primary block', onclick: () => go(false) }, 'Belépés'),
+      h('div', { class: 'row', style: 'justify-content:center;margin-top:6px' },
+        h('button', { class: 'link', onclick: () => go(true) }, 'Első alkalom? Regisztráció')),
+      msg)));
 }
 
 function render() {
   const body = { log: renderLog, month: renderMonth, import: renderImport }[S.tab]();
-  const tab = (id, label) => h('button', { class: S.tab === id ? 'on' : '', onclick: () => { S.tab = id; render(); } }, label);
+  const tab = (id, label) => h('button', { class: S.tab === id ? 'on' : '', onclick: () => { S.tab = id; render(); } },
+    svg(ICONS[id]), label);
   app.replaceChildren(
-    h('div', { class: 'row' }, h('h1', { class: 'grow' }, 'Spóra'),
-      h('button', { class: 'link', onclick: async () => { await sb.auth.signOut(); renderLogin(); } }, 'Kilépés')),
+    h('header', { class: 'top' }, brandMark(),
+      h('span', { class: 'me' }, member(S.user?.email)?.display_name ?? ''),
+      h('button', { class: 'icon-btn', title: 'Kilépés', 'aria-label': 'Kilépés', onclick: logout }, svg(ICONS.logout))),
     ...body.flat(Infinity).filter(c => c != null && c !== false),
     h('nav', { class: 'tabs' }, tab('log', 'Napló'), tab('month', 'Hónap'), tab('import', 'Import')));
   if (S.tab === 'log') document.getElementById('quick')?.focus({ preventScroll: true });
@@ -148,19 +167,21 @@ function monthNav() {
   const label = new Date(y, m - 1, 1).toLocaleDateString('hu-HU', { year: 'numeric', month: 'long' });
   const isCurrent = S.month === localIso(new Date()).slice(0, 7);
   return h('div', { class: 'month-nav' },
-    h('button', { class: 'link', onclick: () => shiftMonth(-1) }, '‹ előző'),
+    h('button', { class: 'icon-btn', title: 'Előző hónap', 'aria-label': 'Előző hónap', onclick: () => shiftMonth(-1) }, svg(ICONS.prev)),
     h('strong', {}, label),
-    h('button', { class: 'link', disabled: isCurrent, onclick: () => shiftMonth(1) }, 'következő ›'));
+    h('button', { class: 'icon-btn', title: 'Következő hónap', 'aria-label': 'Következő hónap', disabled: isCurrent,
+      onclick: () => shiftMonth(1) }, svg(ICONS.next)));
 }
 
 function addForm() {
   const d = S.draft;
-  const quick = h('input', { id: 'quick', placeholder: 'pl. kenyer 10,88', autocomplete: 'off', enterkeyhint: 'done', value: d.text });
+  const quick = h('input', { id: 'quick', placeholder: 'pl. kenyér 10,88', autocomplete: 'off', enterkeyhint: 'done', value: d.text,
+    'aria-label': 'Mit vettél?' });
   const amount = h('input', { inputmode: 'decimal', placeholder: '0,00' });
   const date = h('input', { type: 'date' });
   const dHint = dateHint(date);
   const cat = categorySelect(null);
-  const save = h('button', { class: 'primary' }, 'Mentés');
+  const save = h('button', { class: 'primary block' }, 'Mentés');
   let parsed = { description: '', amount: null, date: null }, suggested = null;
 
   const sync = () => {
@@ -195,58 +216,78 @@ function addForm() {
   };
   sync();
 
-  return h('div', { class: 'card' }, quick,
+  return h('div', { class: 'card' }, h('p', { class: 'card-title' }, 'Mit vettél?'), quick,
     h('div', { class: 'fields' },
       h('div', {}, h('label', {}, 'Összeg (lei)'), amount),
       h('div', {}, h('label', {}, 'Dátum'), date, dHint),
-      h('div', { class: 'full' }, h('label', {}, 'Kategória'), cat),
-      h('div', { class: 'full' }, save)));
+      h('div', { class: 'full' }, h('label', {}, 'Kategória'), cat)),
+    save);
 }
 
 function spendingItem(s) {
+  const who = member(s.created_by_email)?.display_name ?? s.created_by_email;
   return h('button', { class: 'item', onclick: () => openEdit(s) },
-    h('span', { class: 'who', title: member(s.created_by_email)?.display_name ?? '' }, initial(s.created_by_email)),
-    h('span', { class: 'desc' }, s.description),
-    h('span', { class: 'chip' }, catName(s.category_id)),
-    h('span', { class: 'amt' }, money(s.amount)));
+    catIcon(s.category_id),
+    h('span', { class: 'item-main' },
+      h('span', { class: 'desc' }, s.description),
+      h('span', { class: 'sub' }, `${catName(s.category_id)} · ${who}`)),
+    h('span', { class: 'amt num' }, money(s.amount)));
 }
 
 function renderLog() {
   const days = new Map();
   for (const s of S.spendings) (days.get(s.spent_on) ?? days.set(s.spent_on, []).get(s.spent_on)).push(s);
-  const total = S.spendings.reduce((a, s) => a + Number(s.amount), 0);
   const list = [...days].map(([day, items]) => [
     h('div', { class: 'day' },
       h('span', {}, new Date(day + 'T00:00').toLocaleDateString('hu-HU', { month: 'short', day: 'numeric', weekday: 'long' })),
-      h('span', {}, money(items.reduce((a, s) => a + Number(s.amount), 0)))),
+      h('span', { class: 'num' }, money(sumOf(items)))),
     items.map(spendingItem),
   ]);
-  return [addForm(), monthNav(), h('div', { class: 'muted' }, `Összesen: ${money(total)}`),
-    list.length ? list : h('p', { class: 'muted' }, 'Ebben a hónapban még nincs költés.')];
+  return [addForm(), monthNav(),
+    h('div', { class: 'strip-total' },
+      h('span', { class: 'muted' }, `${S.spendings.length} tétel`), h('strong', { class: 'num' }, money(sumOf(S.spendings)))),
+    list.length ? list : h('p', { class: 'empty' }, 'Ebben a hónapban még nincs költés.')];
 }
 
 function bars(groups) {
+  const total = groups.reduce((a, g) => a + g.sum, 0) || 1;
   const max = Math.max(...groups.map(g => g.sum), 1);
-  return groups.map(g => h('div', { class: 'bar-row' },
-    h('div', { class: 'row' }, h('span', {}, g.label), h('span', { class: 'amt' }, money(g.sum))),
-    h('div', { class: 'bar' }, h('span', { style: `width:${(g.sum / max * 100).toFixed(1)}%` }))));
+  return groups.map(g => h('div', { class: 'bar-row', style: `--cat:${g.color}` },
+    h('span', { class: 'cat-icon', style: `--cat:${g.color}` }, g.emoji),
+    h('span', { class: 'name' }, g.label),
+    h('span', { class: 'amt num' }, money(g.sum)),
+    h('div', { class: 'bar' }, h('span', { style: `width:${(g.sum / max * 100).toFixed(1)}%` })),
+    h('span', { class: 'pct num' }, `${Math.round(g.sum / total * 100)}%`)));
 }
 
-function groupSum(key, label) {
+function groupSum(key, describe) {
   const m = new Map();
   for (const s of S.spendings) m.set(key(s), (m.get(key(s)) ?? 0) + Number(s.amount));
-  return [...m].map(([k, sum]) => ({ label: label(k), sum })).sort((a, b) => b.sum - a.sum);
+  return [...m].map(([k, sum]) => ({ ...describe(k), sum })).sort((a, b) => b.sum - a.sum);
 }
 
 function renderMonth() {
-  const total = S.spendings.reduce((a, s) => a + Number(s.amount), 0);
-  if (!S.spendings.length) return [monthNav(), h('p', { class: 'muted' }, 'Ebben a hónapban még nincs költés.')];
+  if (!S.spendings.length) return [monthNav(), h('p', { class: 'empty' }, 'Ebben a hónapban még nincs költés.')];
+  const total = sumOf(S.spendings);
+  const [y, m] = S.month.split('-').map(Number);
+  const isCurrent = S.month === localIso(new Date()).slice(0, 7);
+  const days = isCurrent ? new Date().getDate() : new Date(y, m, 0).getDate();
+  const byCategory = groupSum(s => s.category_id, id => ({ label: catName(id), ...categoryLook(catName(id)) }));
+  const PERSON_COLORS = ['#3F9B6B', '#E0A43A', '#4C7FD1'];
+  const people = groupSum(s => s.created_by_email.toLowerCase(), e => {
+    const name = member(e)?.display_name ?? e;
+    const i = [...new Set(S.members.map(x => x.display_name))].indexOf(name);
+    return { label: name, emoji: name.slice(0, 2), color: PERSON_COLORS[Math.max(i, 0) % PERSON_COLORS.length] };
+  });
   return [monthNav(),
-    h('div', { class: 'card' },
-      h('div', { class: 'muted' }, `Összes költés · ${S.spendings.length} tétel`),
-      h('div', { class: 'total' }, money(total)),
-      h('h2', {}, 'Kategóriánként'), bars(groupSum(s => s.category_id, catName)),
-      h('h2', {}, 'Ki rögzítette'), bars(groupSum(s => s.created_by_email.toLowerCase(), e => member(e)?.display_name ?? e)))];
+    h('div', { class: 'hero' },
+      h('div', { class: 'label' }, 'Elköltve'),
+      h('div', { class: 'big num' }, money(total)),
+      h('div', { class: 'facts' },
+        h('span', {}, h('b', {}, String(S.spendings.length)), ' tétel'),
+        h('span', {}, 'napi átlag ', h('b', { class: 'num' }, money(total / days))))),
+    h('h2', {}, 'Kategóriánként'), h('div', { class: 'card' }, bars(byCategory)),
+    h('h2', {}, 'Ki rögzítette'), h('div', { class: 'card' }, bars(people))];
 }
 
 function renderImport() {
@@ -341,16 +382,15 @@ async function start() {
   try {
     await loadRefs();
     if (!member(S.user.email)) {
-      app.replaceChildren(h('h1', {}, 'Spóra'), h('div', { class: 'card' },
-        h('p', {}, `A(z) ${S.user.email} cím nincs az engedélyezett listán.`),
+      notice(h('p', {}, `A(z) ${S.user.email} cím nincs az engedélyezett listán.`),
         h('p', { class: 'muted' }, 'Add hozzá az allowed_emails táblához a Supabase-ben.'),
-        h('button', { onclick: async () => { await sb.auth.signOut(); renderLogin(); } }, 'Kilépés')));
+        h('button', { class: 'ghost', onclick: logout }, 'Kilépés'));
       return;
     }
     await loadMonth();
     render();
   } catch (e) {
-    app.replaceChildren(h('h1', {}, 'Spóra'), h('div', { class: 'card warn' }, `Hiba: ${e.message ?? e}`));
+    notice(h('p', { class: 'warn' }, `Hiba: ${e.message ?? e}`));
   }
 }
 

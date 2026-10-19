@@ -1,5 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="112" fill="#1f6f5c"/>
-  <path d="M256 104 96 236h44v168h232V236h44z" fill="#f6f4ef"/>
-  <text x="256" y="368" font-family="Arial, sans-serif" font-size="150" font-weight="700" fill="#1f6f5c" text-anchor="middle">lei</text>
+  <!-- Spóra app icon: a sprout growing out from behind a coin, on moss green. -->
+  <rect width="512" height="512" rx="116" fill="#2F6B4F"/>
+  <path d="M256 230 V112" stroke="#F6F2E9" stroke-width="24" stroke-linecap="round"/>
+  <path d="M256 168 C 196 168, 160 132, 152 80 C 212 80, 250 110, 256 168 Z" fill="#A8D5B5"/>
+  <path d="M256 140 C 312 140, 348 108, 362 56 C 302 56, 262 84, 256 140 Z" fill="#F6F2E9"/>
+  <circle cx="256" cy="330" r="124" fill="#E0A43A"/>
+  <circle cx="256" cy="330" r="124" fill="none" stroke="#C99232" stroke-width="10"/>
+  <circle cx="256" cy="330" r="92" fill="none" stroke="#B9822A" stroke-width="10" stroke-dasharray="2 14" stroke-linecap="round"/>
+  <text x="256" y="378" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-weight="700"
+        font-size="140" fill="#9C6B1E">S</text>
 </svg>
