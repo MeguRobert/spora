@@ -8,26 +8,28 @@ Supabase free tier for data, no build step.
 Type `kenyer 10,88` → amount, date (today) and category fill themselves → Mentés.
 Fix a wrong category once and the app remembers that word next time.
 
-## Setup (one time, ~15 min, free)
+## Where it runs
 
-1. **Supabase project** — supabase.com → sign up → *New project*. Region: Frankfurt (eu-central-1).
-2. **Database** — open `supabase/schema.sql`, replace the two example emails at the bottom with yours
-   (the ones you will log in with), then in Supabase: *SQL Editor → New query* → paste → *Run*.
-3. **Email confirmation off** — *Authentication → Sign In / Providers → Email* → turn off
-   *Confirm email* → Save. (Otherwise each of you must click a link in an email first.)
-4. **Keys** — *Project Settings → API*: copy *Project URL* and the *anon public* key into `config.js`.
-5. **Host it** — app.netlify.com/drop → drag the `spora` folder onto the page. You get an
-   `https://….netlify.app` link. (Any static host works: Vercel, GitHub Pages, Cloudflare Pages.)
-6. **Accounts** — both of you open the link → *Első regisztráció* with your email + a password.
-   Afterwards, optionally block strangers from even creating accounts:
-   *Authentication → Sign In / Providers → Allow new users to sign up* → off.
-   (Strangers could not see any data anyway — only emails in `allowed_emails` can read or write.)
-7. **Install on phones**
+| | |
+|---|---|
+| App | https://megurobert.github.io/spora/ — GitHub Pages from `main` (root). **Pushing `main` deploys.** |
+| Database | Supabase project `spora` (ref `eyzbdakkalbckoaaxvzj`, Frankfurt, free tier) |
+| Schema | `supabase/schema.sql` — already applied; re-running it fails on existing tables |
+| Keepalive | `.github/workflows/supabase-keepalive.yml` calls `ping()` daily so the free project never pauses (secrets `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`) |
+| Repo | `MeguRobert/spora` — personal account; this clone uses `~/.ssh/id_ed25519_meguRobert` via `core.sshCommand` |
+
+Access: only emails in the `allowed_emails` table can read or write anything (row-level security);
+the publishable key alone can call `ping()` and nothing else. Email confirmation is off.
+
+## Getting started (each of you, once)
+
+1. Open the app link → *Első regisztráció* with your email (must be in `allowed_emails`) + a password.
+2. Install on the phone:
    - Android (Chrome): ⋮ menu → *Add to Home screen* / *Install app*
    - iPhone (Safari): Share button → *Add to Home Screen*
 
-Note: Supabase pauses a free project after 7 days with no use; daily logging keeps it awake.
-If it ever pauses, open the Supabase dashboard and click *Restore*.
+Optional, once both accounts exist: Supabase → *Authentication → Sign In / Providers →
+Allow new users to sign up* → off.
 
 ## Importing the Messenger history
 
