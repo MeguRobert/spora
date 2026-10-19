@@ -75,7 +75,7 @@ select k, (select id from categories where name = c) from (values
   ('benzin', 'Üzemanyag'), ('motorina', 'Üzemanyag'), ('diesel', 'Üzemanyag'), ('omv', 'Üzemanyag'),
   ('petrom', 'Üzemanyag'), ('mol', 'Üzemanyag'), ('lukoil', 'Üzemanyag'), ('rompetrol', 'Üzemanyag'),
   ('szerviz', 'Autó'), ('rca', 'Autó'), ('rovinieta', 'Autó'), ('gumi', 'Autó'),
-  ('villany', 'Ház & rezsi'), ('gaz', 'Ház & rezsi'), ('viz', 'Ház & rezsi'), ('internet', 'Ház & rezsi'),
+  ('villany', 'Ház & rezsi'), ('gaz', 'Ház & rezsi'), ('vizszamla', 'Ház & rezsi'), ('viz', 'Élelmiszer'), ('internet', 'Ház & rezsi'),
   ('dedeman', 'Ház & rezsi'), ('lakber', 'Ház & rezsi'), ('ikea', 'Ház & rezsi'), ('pompa', 'Ház & rezsi'),
   ('gyogyszer', 'Egészség'), ('patika', 'Egészség'), ('farmacia', 'Egészség'), ('catena', 'Egészség'),
   ('orvos', 'Egészség'),
