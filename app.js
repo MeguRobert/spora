@@ -88,7 +88,12 @@ async function toggleReminders() {
       toast('Emlékeztetők bekapcsolva: minden nap 10:00 és 22:00');
     }
   } catch (e) {
-    toast(e.message ?? String(e), 6000);
+    // "Registration failed - push service error": the browser could not reach its own push server
+    // (Brave with Google push off, no Google services on the phone, battery saver, blocked network).
+    const pushServiceDown = e?.name === 'AbortError' || /push service/i.test(e?.message ?? '');
+    toast(pushServiceDown
+      ? 'A böngésző nem érte el az értesítési szerverét. Braveben: Beállítások → Adatvédelem → „Google-szolgáltatások használata a push üzenetekhez” be. Androidon: a Chrome értesítései legyenek engedélyezve, és a Google Play-szolgáltatások frissek. Utána próbáld újra.'
+      : (e?.message ?? String(e)), 9000);
   }
   render();
 }
