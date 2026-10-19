@@ -61,7 +61,7 @@ create policy household_all on spendings      for all using (is_household()) wit
 
 insert into categories (name, sort) values
   ('Élelmiszer', 1), ('Üzemanyag', 2), ('Autó', 3), ('Ház & rezsi', 4), ('Egészség', 5),
-  ('Ruházat', 6), ('Étterem & szórakozás', 7), ('Ajándék', 8), ('Adomány & templom', 9), ('Online vásárlás', 10),
+  ('Ruházat', 6), ('Étterem & szórakozás', 7), ('Ajándék', 8), ('Sport', 8), ('Adomány & templom', 9), ('Online vásárlás', 10),
   ('Egyéb', 99);
 
 insert into category_rules (keyword, category_id)
@@ -71,7 +71,9 @@ select k, (select id from categories where name = c) from (values
   ('mega image', 'Élelmiszer'), ('piac', 'Élelmiszer'), ('hus', 'Élelmiszer'), ('zoldseg', 'Élelmiszer'),
   ('gyumolcs', 'Élelmiszer'), ('tojas', 'Élelmiszer'), ('kisbolt', 'Élelmiszer'), ('moza', 'Élelmiszer'),
   ('placinta', 'Élelmiszer'), ('kave', 'Élelmiszer'), ('zuzu', 'Élelmiszer'), ('szenya', 'Élelmiszer'), ('szendvics', 'Élelmiszer'),
-  ('rovignetta', 'Autó'), ('analizis', 'Egészség'), ('virag', 'Ajándék'), ('foci', 'Étterem & szórakozás'),
+  ('rovignetta', 'Autó'), ('analizis', 'Egészség'), ('virag', 'Ajándék'),
+  ('foci', 'Sport'), ('gym', 'Sport'), ('edzes', 'Sport'), ('edzo', 'Sport'), ('konditerem', 'Sport'),
+  ('fitness', 'Sport'), ('fitnesz', 'Sport'), ('uszoda', 'Sport'), ('joga', 'Sport'), ('sala', 'Sport'),
   ('benzin', 'Üzemanyag'), ('motorina', 'Üzemanyag'), ('diesel', 'Üzemanyag'), ('omv', 'Üzemanyag'),
   ('petrom', 'Üzemanyag'), ('mol', 'Üzemanyag'), ('lukoil', 'Üzemanyag'), ('rompetrol', 'Üzemanyag'),
   ('szerviz', 'Autó'), ('rca', 'Autó'), ('rovinieta', 'Autó'), ('gumi', 'Autó'),
