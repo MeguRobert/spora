@@ -3,6 +3,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 import { parseEntry, parseChat, parseAmount, suggestCategory, ruleKeyword, localIso } from './parse.js';
 import { LOGO, ICONS, categoryLook, svg } from './brand.js';
 import { registerWorker, currentSubscription, enablePush, disablePush, pushBlocker } from './push.js';
+import { initLogging, logError, log, environment } from './log.js';
 
 const app = document.getElementById('app');
 const dlg = document.getElementById('edit');
@@ -82,7 +83,7 @@ async function toggleReminders() {
       toast('Emlékeztetők kikapcsolva');
     } else {
       const blocker = pushBlocker();
-      if (blocker) { toast(blocker, 6000); return; }
+      if (blocker) { log('push', 'blocked', { step: 'blocked', reason: blocker, env: await environment() }); toast(blocker, 6000); return; }
       await enablePush(sb);
       S.pushOn = true;
       toast('Emlékeztetők bekapcsolva: minden nap 10:00 és 22:00');
@@ -238,7 +239,7 @@ function addForm() {
     const category_id = toId(cat.value);
     save.disabled = true;
     const { error } = await sb.from('spendings').insert({ description, amount: value, spent_on: date.value, category_id });
-    if (error) { toast(error.message); save.disabled = false; return; }
+    if (error) { logError("db write", error); toast(error.message); save.disabled = false; return; }
     await learn(description, category_id, suggested);
     S.draft = newDraft();
     toast(`Mentve: ${description} — ${money(value)}`);
@@ -350,7 +351,7 @@ function renderImport() {
     const { error } = await sb.from('spendings').insert(chosen.map(r => ({
       description: r.description.trim(), amount: r.amount, spent_on: r.date, category_id: r.category_id,
     })));
-    if (error) { toast(error.message); return; }
+    if (error) { logError("db write", error); toast(error.message); return; }
     // Categories picked or corrected during import teach the rules, same as the quick entry does.
     for (const r of chosen) await learn(r.description, r.category_id, r.suggested);
     toast(`${chosen.length} költés importálva`);
@@ -380,14 +381,14 @@ function openEdit(s) {
     const category_id = toId(cat.value);
     const { error } = await sb.from('spendings')
       .update({ description: desc.value.trim(), amount, spent_on: date.value, category_id }).eq('id', s.id);
-    if (error) { toast(error.message); return; }
+    if (error) { logError("db write", error); toast(error.message); return; }
     await learn(desc.value, category_id, s.category_id);
     dlg.close(); await loadMonth(); render();
   };
   const remove = async () => {
     if (!confirm(`Törlöd: ${s.description} — ${money(s.amount)}?`)) return;
     const { error } = await sb.from('spendings').delete().eq('id', s.id);
-    if (error) { toast(error.message); return; }
+    if (error) { logError("db write", error); toast(error.message); return; }
     dlg.close(); await loadMonth(); render();
   };
   dlg.replaceChildren(
@@ -411,6 +412,7 @@ async function start() {
   const { data: { session } } = await sb.auth.getSession();
   if (!session) return renderLogin();
   S.user = session.user;
+  initLogging(sb);
   registerWorker();
   S.pushOn = !!(await currentSubscription().catch(() => null));
   try {
@@ -424,6 +426,7 @@ async function start() {
     await loadMonth();
     render();
   } catch (e) {
+    logError('start', e);
     notice(h('p', { class: 'warn' }, `Hiba: ${e.message ?? e}`));
   }
 }

@@ -1,5 +1,6 @@
 // Daily reminder subscription: this device ↔ a row in push_subscriptions.
 import { VAPID_PUBLIC_KEY } from './config.js';
+import { log, logError, environment } from './log.js';
 
 const fromB64u = s => {
   const b = atob(s.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - s.length % 4) % 4));
@@ -20,7 +21,7 @@ export function pushBlocker() {
 
 export async function registerWorker() {
   if (!('serviceWorker' in navigator)) return null;
-  try { return await navigator.serviceWorker.register('sw.js'); } catch (e) { console.warn(e); return null; }
+  try { return await navigator.serviceWorker.register('sw.js'); } catch (e) { logError('registerWorker', e); return null; }
 }
 
 export async function currentSubscription() {
@@ -29,16 +30,33 @@ export async function currentSubscription() {
   return reg ? reg.pushManager.getSubscription() : null;
 }
 
+// Each step is logged so a failure on a phone shows exactly where it stopped (client_logs, kind 'push').
 export async function enablePush(sb) {
-  const reg = (await navigator.serviceWorker.getRegistration()) ?? (await registerWorker());
-  if (!reg) throw new Error('A háttérszolgáltatás nem indult el.');
-  if ((await Notification.requestPermission()) !== 'granted') throw new Error('Nem kaptam engedélyt az értesítésekhez.');
-  await navigator.serviceWorker.ready;
-  const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: fromB64u(VAPID_PUBLIC_KEY) });
-  const { keys } = sub.toJSON();
-  const { error } = await sb.from('push_subscriptions')
-    .upsert({ endpoint: sub.endpoint, p256dh: keys.p256dh, auth: keys.auth, user_agent: navigator.userAgent.slice(0, 200) });
-  if (error) { await sub.unsubscribe(); throw error; }
+  let step = 'registration';
+  try {
+    const reg = (await navigator.serviceWorker.getRegistration()) ?? (await registerWorker());
+    if (!reg) throw new Error('A háttérszolgáltatás nem indult el.');
+    step = 'permission';
+    const permission = await Notification.requestPermission();
+    log('push', 'permission', { permission });
+    if (permission !== 'granted') throw new Error('Nem kaptam engedélyt az értesítésekhez.');
+    step = 'worker ready';
+    await navigator.serviceWorker.ready;
+    step = 'subscribe';
+    // A leftover subscription made with another key makes subscribe() fail; drop it first.
+    const old = await reg.pushManager.getSubscription();
+    if (old) { log('push', 'dropping existing subscription', { endpointHost: new URL(old.endpoint).host }); await old.unsubscribe(); }
+    const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: fromB64u(VAPID_PUBLIC_KEY) });
+    step = 'save';
+    const { keys } = sub.toJSON();
+    const { error } = await sb.from('push_subscriptions')
+      .upsert({ endpoint: sub.endpoint, p256dh: keys.p256dh, auth: keys.auth, user_agent: navigator.userAgent.slice(0, 200) });
+    if (error) { await sub.unsubscribe(); throw error; }
+    log('push', 'subscribed', { endpointHost: new URL(sub.endpoint).host, env: await environment() });
+  } catch (e) {
+    await logError(`enablePush/${step}`, e, { step });
+    throw e;
+  }
 }
 
 export async function disablePush(sb) {
