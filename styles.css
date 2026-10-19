@@ -65,7 +65,7 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 8px 0 4px;
 .bar > span { display: block; height: 100%; border-radius: 4px; background: var(--accent); }
 
 .import-row { display: grid; grid-template-columns: auto 1fr 90px; gap: 6px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
-.import-row .sub { grid-column: 2 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.import-row .sub { grid-column: 2 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; align-items: start; }
 .import-row input[type=checkbox] { width: 20px; height: 20px; }
 .import-row .src { grid-column: 2 / -1; font-size: 12px; color: var(--muted); }
 
@@ -82,3 +82,4 @@ dialog::backdrop { background: rgb(0 0 0 / .4); }
   position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%); background: var(--text); color: var(--bg);
   padding: 8px 14px; border-radius: 99px; font-size: 14px;
 }
+.date-hint { font-size: 13px; color: var(--muted); margin-top: 4px; }

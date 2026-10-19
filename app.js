@@ -31,6 +31,19 @@ function h(tag, props = {}, ...children) {
 }
 
 const money = n => Number(n).toLocaleString('hu-HU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' lei';
+// The native date picker shows the browser's own format (10/12/2026 in an English Chrome) and a page
+// cannot change that, so each picker gets the date spelled out in Hungarian under it.
+const longDate = iso => iso
+  ? new Date(iso + 'T00:00').toLocaleDateString('hu-HU', { year: 'numeric', month: 'short', day: 'numeric', weekday: 'long' })
+  : '';
+function dateHint(input) {
+  const el = h('div', { class: 'date-hint' });
+  el.refresh = () => { el.textContent = longDate(input.value); };
+  input.addEventListener('input', el.refresh);
+  input.addEventListener('change', el.refresh);
+  el.refresh();
+  return el;
+}
 const amountText = n => (n == null ? '' : String(n).replace('.', ','));
 const catName = id => S.categories.find(c => c.id === id)?.name ?? 'Nincs kategória';
 const member = email => S.members.find(m => m.email.toLowerCase() === (email ?? '').toLowerCase());
@@ -145,6 +158,7 @@ function addForm() {
   const quick = h('input', { id: 'quick', placeholder: 'pl. kenyer 10,88', autocomplete: 'off', enterkeyhint: 'done', value: d.text });
   const amount = h('input', { inputmode: 'decimal', placeholder: '0,00' });
   const date = h('input', { type: 'date' });
+  const dHint = dateHint(date);
   const cat = categorySelect(null);
   const save = h('button', { class: 'primary' }, 'Mentés');
   let parsed = { description: '', amount: null, date: null }, suggested = null;
@@ -154,6 +168,7 @@ function addForm() {
     suggested = suggestCategory(parsed.description, S.rules);
     amount.value = d.amount ?? amountText(parsed.amount);
     date.value = d.date ?? parsed.date ?? localIso(new Date());
+    dHint.refresh();
     cat.value = d.cat ?? suggested ?? '';
     save.disabled = !quick.value.trim();
   };
@@ -183,7 +198,7 @@ function addForm() {
   return h('div', { class: 'card' }, quick,
     h('div', { class: 'fields' },
       h('div', {}, h('label', {}, 'Összeg (lei)'), amount),
-      h('div', {}, h('label', {}, 'Dátum'), date),
+      h('div', {}, h('label', {}, 'Dátum'), date, dHint),
       h('div', { class: 'full' }, h('label', {}, 'Kategória'), cat),
       h('div', { class: 'full' }, save)));
 }
@@ -251,7 +266,7 @@ function renderImport() {
     cat.onchange = () => { r.category_id = toId(cat.value); };
     return h('div', { class: 'import-row' },
       h('input', { type: 'checkbox', checked: r.on, onchange: e => { r.on = e.target.checked; } }), desc, amt,
-      h('div', { class: 'sub' }, date, cat),
+      h('div', { class: 'sub' }, h('div', {}, date, dateHint(date)), cat),
       h('div', { class: 'src' }, r.line, r.problems.length ? h('span', { class: 'warn' }, ` — ${r.problems.join(', ')}`) : null));
   });
   const doImport = async () => {
@@ -307,7 +322,7 @@ function openEdit(s) {
     h('label', {}, 'Leírás'), desc,
     h('div', { class: 'fields' },
       h('div', {}, h('label', {}, 'Összeg (lei)'), amt),
-      h('div', {}, h('label', {}, 'Dátum'), date),
+      h('div', {}, h('label', {}, 'Dátum'), date, dateHint(date)),
       h('div', { class: 'full' }, h('label', {}, 'Kategória'), cat)),
     h('p', { class: 'muted' }, `Rögzítette: ${member(s.created_by_email)?.display_name ?? s.created_by_email}`),
     h('div', { class: 'row' },
