@@ -235,6 +235,7 @@ function render() {
     ...body.flat(Infinity).filter(c => c != null && c !== false),
     h('nav', { class: 'tabs' }, tab('log', 'Napló'), tab('month', 'Hónap'), tab('import', 'Import')));
   if (S.tab === 'log') document.getElementById('quick')?.focus({ preventScroll: true });
+  if (S.tab === 'month') document.querySelector('.kassza.on')?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
 }
 
 function monthNav() {
@@ -352,6 +353,51 @@ function groupSum(key, describe, list = S.spendings) {
   return [...m].map(([k, sum]) => ({ ...describe(k), sum })).sort((a, b) => b.sum - a.sum);
 }
 
+// ---------- month view: one "kassza" at a time ----------
+// Cards across the top: Összes, Háztartás, then every separate pot (always shown, even when empty).
+// The chosen card is remembered per device.
+const KASSZA_KEY = 'spora.kassza';
+function chosenKassza() {
+  try { return localStorage.getItem(KASSZA_KEY) ?? 'household'; } catch { return 'household'; }
+}
+function chooseKassza(id) {
+  try { localStorage.setItem(KASSZA_KEY, id); } catch { /* private mode: just not remembered */ }
+  render();
+}
+
+const PERSON_COLORS = ['#3F9B6B', '#E0A43A', '#4C7FD1'];
+const personLook = e => {
+  const name = member(e)?.display_name ?? e;
+  const i = [...new Set(S.members.map(x => x.display_name))].indexOf(name);
+  return { label: name, emoji: name.slice(0, 2), color: PERSON_COLORS[Math.max(i, 0) % PERSON_COLORS.length] };
+};
+const byCategoryBars = list => bars(groupSum(s => s.category_id, id => ({ label: catName(id), ...categoryLook(catName(id)) }), list));
+const daysSoFar = () => {
+  const [y, m] = S.month.split('-').map(Number);
+  return S.month === localIso(new Date()).slice(0, 7) ? new Date().getDate() : new Date(y, m, 0).getDate();
+};
+const hero = (label, amount, ...facts) => h('div', { class: 'hero' },
+  h('div', { class: 'label' }, label),
+  h('div', { class: 'big num' }, money(amount)),
+  facts.length ? h('div', { class: 'facts' }, facts) : null);
+const fact = (text, value, after = '') => h('span', {}, text, h('b', { class: 'num' }, value), after);
+
+function kasszaCards(current) {
+  const household = S.spendings.filter(isHousehold);
+  const pots = S.categories.filter(c => c.kind !== 'household');
+  const card = (id, title, icon, value, note) => h('button', {
+    class: 'kassza' + (current === id ? ' on' : ''), onclick: () => chooseKassza(id), 'aria-pressed': current === id ? 'true' : 'false',
+  }, h('span', { class: 'k-title' }, icon ? `${icon} ${title}` : title),
+     h('span', { class: 'k-sum num' }, money(value)),
+     note ? h('span', { class: 'k-note' }, note) : null);
+  return h('div', { class: 'kassza-row' },
+    card('all', 'Összes', '', sumOf(S.spendings)),
+    card('household', 'Háztartás', '🏠', sumOf(household)),
+    pots.map(c => c.kind === 'receivable'
+      ? card(String(c.id), c.name, categoryLook(c.name).emoji, sumOf(S.pots.filter(x => x.category_id === c.id && !x.returned_on)), 'kint van')
+      : card(String(c.id), c.name, categoryLook(c.name).emoji, sumOf(S.spendings.filter(x => x.category_id === c.id)))));
+}
+
 async function setReturned(s, returned) {
   const { error } = await sb.from('spendings').update({ returned_on: returned ? localIso(new Date()) : null }).eq('id', s.id);
   if (error) { logError('db write', error); toast(error.message); return false; }
@@ -360,58 +406,62 @@ async function setReturned(s, returned) {
   return true;
 }
 
-// Separate pots: this month and all-time per category; Visszajár shows what is still owed to you.
-function potsSection() {
-  const pots = S.categories.filter(c => c.kind !== 'household');
-  const monthOf = id => sumOf(S.spendings.filter(x => x.category_id === id));
-  const allOf = id => S.pots.filter(x => x.category_id === id);
-  const rows = pots.filter(c => allOf(c.id).length).map(c => {
-    const look = categoryLook(c.name), all = allOf(c.id);
-    const head = (label, value) => h('div', { class: 'pot-head' },
-      h('span', { class: 'cat-icon', style: `--cat:${look.color}` }, look.emoji),
-      h('span', { class: 'name' }, c.name),
-      h('span', { class: 'pot-sum' }, h('span', { class: 'muted' }, label), h('b', { class: 'num' }, money(value))));
-    if (c.kind === 'receivable') {
-      const open = all.filter(x => !x.returned_on);
-      return h('div', { class: 'pot' }, head('kint van ', sumOf(open)),
-        open.length
-          ? h('div', { class: 'pot-list' }, open.map(x => h('div', { class: 'pot-row' },
-              h('span', { class: 'grow pot-desc' }, h('span', {}, x.description), h('small', { class: 'muted' }, longDate(x.spent_on))),
-              h('span', { class: 'num' }, money(x.amount)),
-              h('button', { class: 'ghost small', onclick: () => setReturned(x, true) }, 'Visszakaptam'))))
-          : h('p', { class: 'muted pot-empty' }, 'Minden visszajött. 🎉'));
-    }
-    return h('div', { class: 'pot' }, head('ebben a hónapban ', monthOf(c.id)),
-      h('div', { class: 'pot-total muted' }, 'Összesen eddig: ', h('b', { class: 'num' }, money(sumOf(all)))));
-  });
-  return rows.length ? [h('h2', {}, 'Külön kassza'), h('p', { class: 'muted pot-note' }, 'Nem számít bele a háztartás havi összegébe.'),
-    h('div', { class: 'card' }, rows)] : null;
+function viewAll() {
+  if (!S.spendings.length) return h('p', { class: 'empty' }, 'Ebben a hónapban még nincs kiadás.');
+  const household = S.spendings.filter(isHousehold);
+  const kasszak = [
+    { label: 'Háztartás', emoji: '🏠', color: '#3F9B6B', sum: sumOf(household) },
+    ...S.categories.filter(c => c.kind !== 'household')
+      .map(c => ({ label: c.name, ...categoryLook(c.name), sum: sumOf(S.spendings.filter(x => x.category_id === c.id)) })),
+  ].filter(k => k.sum > 0).sort((a, b) => b.sum - a.sum);
+  return [hero('Összes kiadás', sumOf(S.spendings), fact('', String(S.spendings.length), ' tétel')),
+    h('h2', {}, 'Kasszánként'), h('div', { class: 'card' }, bars(kasszak)),
+    h('h2', {}, 'Kategóriánként'), h('div', { class: 'card' }, byCategoryBars(S.spendings))];
+}
+
+function viewHousehold() {
+  const household = S.spendings.filter(isHousehold);
+  if (!household.length) return h('p', { class: 'empty' }, 'Ebben a hónapban még nincs háztartási költés.');
+  const total = sumOf(household);
+  return [hero('Háztartás · elköltve', total,
+      fact('', String(household.length), ' tétel'), fact('napi átlag ', money(total / daysSoFar()))),
+    h('h2', {}, 'Kategóriánként'), h('div', { class: 'card' }, byCategoryBars(household)),
+    h('h2', {}, 'Ki rögzítette'), h('div', { class: 'card' }, bars(groupSum(s => s.created_by_email.toLowerCase(), personLook, household)))];
+}
+
+function viewPot(c) {
+  const month = S.spendings.filter(x => x.category_id === c.id);
+  const all = S.pots.filter(x => x.category_id === c.id);
+  return [hero(`${c.name} · ebben a hónapban`, sumOf(month), fact('összesen eddig ', money(sumOf(all)))),
+    h('p', { class: 'muted pot-note' }, 'Külön kassza: nem számít bele a háztartás havi összegébe.'),
+    h('h2', {}, 'Tételek ebben a hónapban'),
+    month.length ? month.map(spendingItem) : h('p', { class: 'empty' }, 'Ebben a hónapban nincs tétel.')];
+}
+
+function viewReceivable(c) {
+  const all = S.pots.filter(x => x.category_id === c.id);
+  const open = all.filter(x => !x.returned_on), back = all.filter(x => x.returned_on);
+  const row = (x, action) => h('div', { class: 'pot-row' },
+    h('span', { class: 'grow pot-desc' }, h('span', {}, x.description),
+      h('small', { class: 'muted' }, x.returned_on ? `${longDate(x.spent_on)} · visszakapva ${longDate(x.returned_on)}` : longDate(x.spent_on))),
+    h('span', { class: 'num' }, money(x.amount)), action);
+  return [hero('Visszajár · kint van', sumOf(open), fact('', String(open.length), ' nyitott tétel')),
+    h('p', { class: 'muted pot-note' }, 'Amit valaki helyett kifizettél. Nem számít bele a háztartás havi összegébe.'),
+    h('h2', {}, 'Még kint van'),
+    h('div', { class: 'card' }, open.length
+      ? open.map(x => row(x, h('button', { class: 'ghost small', onclick: () => setReturned(x, true) }, 'Visszakaptam')))
+      : h('p', { class: 'muted', style: 'margin:0' }, 'Minden visszajött. 🎉')),
+    back.length ? [h('h2', {}, 'Visszakapva'),
+      h('div', { class: 'card faded' }, back.map(x => row(x, h('button', { class: 'ghost small', onclick: () => setReturned(x, false) }, 'Mégsem'))))] : null];
 }
 
 function renderMonth() {
-  const household = S.spendings.filter(isHousehold);
-  if (!household.length) return [monthNav(), h('p', { class: 'empty' }, 'Ebben a hónapban még nincs háztartási költés.'), potsSection()];
-  const total = sumOf(household);
-  const [y, m] = S.month.split('-').map(Number);
-  const isCurrent = S.month === localIso(new Date()).slice(0, 7);
-  const days = isCurrent ? new Date().getDate() : new Date(y, m, 0).getDate();
-  const byCategory = groupSum(s => s.category_id, id => ({ label: catName(id), ...categoryLook(catName(id)) }), household);
-  const PERSON_COLORS = ['#3F9B6B', '#E0A43A', '#4C7FD1'];
-  const people = groupSum(s => s.created_by_email.toLowerCase(), e => {
-    const name = member(e)?.display_name ?? e;
-    const i = [...new Set(S.members.map(x => x.display_name))].indexOf(name);
-    return { label: name, emoji: name.slice(0, 2), color: PERSON_COLORS[Math.max(i, 0) % PERSON_COLORS.length] };
-  }, household);
-  return [monthNav(),
-    h('div', { class: 'hero' },
-      h('div', { class: 'label' }, 'Háztartás · elköltve'),
-      h('div', { class: 'big num' }, money(total)),
-      h('div', { class: 'facts' },
-        h('span', {}, h('b', {}, String(household.length)), ' tétel'),
-        h('span', {}, 'napi átlag ', h('b', { class: 'num' }, money(total / days))))),
-    h('h2', {}, 'Kategóriánként'), h('div', { class: 'card' }, bars(byCategory)),
-    h('h2', {}, 'Ki rögzítette'), h('div', { class: 'card' }, bars(people)),
-    potsSection()];
+  const current = chosenKassza();
+  const pot = S.categories.find(c => String(c.id) === current && c.kind !== 'household');
+  const body = current === 'all' ? viewAll()
+    : !pot ? viewHousehold()                                   // also the fallback for an unknown/removed choice
+    : pot.kind === 'receivable' ? viewReceivable(pot) : viewPot(pot);
+  return [monthNav(), kasszaCards(pot ? current : current === 'all' ? 'all' : 'household'), body];
 }
 
 function renderImport() {

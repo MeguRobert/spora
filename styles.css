@@ -178,7 +178,7 @@ dialog h1 { font-family: "Fraunces", Georgia, serif; font-size: 22px; margin: 0 
   background: var(--bar-track); color: var(--muted); vertical-align: 1px; }
 .tag.due { background: color-mix(in srgb, var(--honey) 25%, transparent); color: var(--honey-deep); }
 .tag.ok { background: color-mix(in srgb, var(--brand) 18%, transparent); color: var(--brand); }
-.pot-note { margin: -4px 4px 8px; font-size: 13px; }
+.pot-note { margin: 10px 4px 4px; font-size: 13px; }
 .pot + .pot { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 10px; }
 .pot-head { display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: center; }
 .pot-head .cat-icon { width: 34px; height: 34px; font-size: 17px; border-radius: 10px; }
@@ -194,3 +194,19 @@ button.small { padding: 6px 10px; font-size: 13px; border-radius: 10px; }
   border-radius: 12px; background: color-mix(in srgb, var(--honey) 14%, transparent); font-size: 14px; }
 .pot-desc { display: flex; flex-direction: column; min-width: 0; }
 .pot-desc small { font-size: 12px; }
+
+/* ---------- kassza cards (month view) ---------- */
+.kassza-row { display: flex; gap: 8px; overflow-x: auto; margin: 4px -16px 14px; padding: 2px 16px 6px; scroll-snap-type: x proximity; scroll-padding-inline: 16px; scrollbar-width: none; }
+.kassza-row::-webkit-scrollbar { display: none; }
+.kassza {
+  flex: none; min-width: 112px; scroll-snap-align: start; text-align: left; display: flex; flex-direction: column; gap: 2px;
+  padding: 10px 12px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); color: var(--text);
+}
+.kassza .k-title { font-size: 13px; color: var(--muted); white-space: nowrap; }
+.kassza .k-sum { font-weight: 700; font-size: 15px; white-space: nowrap; }
+.kassza .k-note { font-size: 11px; color: var(--muted); }
+.kassza.on { background: var(--brand); border-color: var(--brand); color: var(--brand-text); }
+.kassza.on .k-title, .kassza.on .k-note { color: inherit; opacity: .85; }
+.card.faded { opacity: .75; }
+.card .pot-row:first-child { padding-top: 0; }
+.card .pot-row:last-child { padding-bottom: 0; }
