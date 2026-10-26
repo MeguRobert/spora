@@ -171,3 +171,26 @@ dialog h1 { font-family: "Fraunces", Georgia, serif; font-size: 22px; margin: 0 
   display: grid; place-items: center; font-size: 13px; font-weight: 700;
   color: var(--brand-text); background: var(--brand);
 }
+
+/* ---------- separate pots + Visszajár ---------- */
+.strip-note { padding: 0 4px; font-size: 13px; }
+.tag { display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 99px; font-size: 11px; font-weight: 650;
+  background: var(--bar-track); color: var(--muted); vertical-align: 1px; }
+.tag.due { background: color-mix(in srgb, var(--honey) 25%, transparent); color: var(--honey-deep); }
+.tag.ok { background: color-mix(in srgb, var(--brand) 18%, transparent); color: var(--brand); }
+.pot-note { margin: -4px 4px 8px; font-size: 13px; }
+.pot + .pot { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 10px; }
+.pot-head { display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: center; }
+.pot-head .cat-icon { width: 34px; height: 34px; font-size: 17px; border-radius: 10px; }
+.pot-head .name { font-weight: 600; }
+.pot-sum { text-align: right; white-space: nowrap; }
+.pot-total { margin: 4px 0 0 44px; font-size: 13px; }
+.pot-list { margin: 6px 0 0 44px; }
+.pot-row { display: flex; gap: 8px; align-items: center; padding: 6px 0; font-size: 14px; }
+.pot-row + .pot-row { border-top: 1px dashed var(--line); }
+.pot-empty { margin: 4px 0 0 44px; }
+button.small { padding: 6px 10px; font-size: 13px; border-radius: 10px; }
+.receivable-box { display: flex; gap: 10px; align-items: center; margin: 4px 0 12px; padding: 10px 12px;
+  border-radius: 12px; background: color-mix(in srgb, var(--honey) 14%, transparent); font-size: 14px; }
+.pot-desc { display: flex; flex-direction: column; min-width: 0; }
+.pot-desc small { font-size: 12px; }

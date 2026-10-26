@@ -14,7 +14,7 @@ Fix a wrong category once and the app remembers that word next time.
 |---|---|
 | App | https://megurobert.github.io/spora/ — GitHub Pages from `main` (root). **Pushing `main` deploys.** |
 | Database | Supabase project `spora` (ref `eyzbdakkalbckoaaxvzj`, Frankfurt, free tier) |
-| Schema | `supabase/schema.sql` — already applied; re-running it fails on existing tables |
+| Schema | Applied in order: `supabase/schema.sql`, `push.sql`, `logs.sql`, `2026-10-26-categories.sql` (category kinds: household / separate pot / Visszajár). Re-running fails on existing objects. |
 | Keepalive | `.github/workflows/supabase-keepalive.yml` calls `ping()` daily so the free project never pauses (secrets `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`) |
 | Repo | `MeguRobert/spora` — personal account; this clone uses `~/.ssh/id_ed25519_meguRobert` via `core.sshCommand` |
 

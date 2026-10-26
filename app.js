@@ -49,6 +49,10 @@ function dateHint(input) {
 }
 const amountText = n => (n == null ? '' : String(n).replace('.', ','));
 const catName = id => S.categories.find(c => c.id === id)?.name ?? 'Nincs kategória';
+// 'household' categories make up the monthly total; 'separate' (APPROB SRL, Házépítés) and
+// 'receivable' (Visszajár) are separate pots shown on their own.
+const catKind = id => S.categories.find(c => c.id === id)?.kind ?? 'household';
+const isHousehold = s => catKind(s.category_id) === 'household';
 const member = email => S.members.find(m => m.email.toLowerCase() === (email ?? '').toLowerCase());
 const toId = v => (v === '' || v == null ? null : Number(v));
 
@@ -59,9 +63,11 @@ function toast(msg, ms = 2200) {
 }
 
 function categorySelect(value) {
+  const opt = c => h('option', { value: c.id, selected: c.id === value }, `${categoryLook(c.name).emoji}  ${c.name}`);
   return h('select', {},
     h('option', { value: '' }, '— kategória —'),
-    S.categories.map(c => h('option', { value: c.id, selected: c.id === value }, `${categoryLook(c.name).emoji}  ${c.name}`)));
+    h('optgroup', { label: 'Háztartás' }, S.categories.filter(c => c.kind === 'household').map(opt)),
+    h('optgroup', { label: 'Külön kassza' }, S.categories.filter(c => c.kind !== 'household').map(opt)));
 }
 
 const catIcon = id => {
@@ -148,7 +154,7 @@ function shiftMonth(delta) {
 // ---------- data ----------
 async function loadRefs() {
   const [cats, rules, members] = await Promise.all([
-    sb.from('categories').select('id,name').order('sort').order('name'),
+    sb.from('categories').select('id,name,kind').order('sort').order('name'),
     sb.from('category_rules').select('keyword,category_id'),
     sb.from('allowed_emails').select('email,display_name'),
   ]);
@@ -163,6 +169,14 @@ async function loadMonth() {
     .order('spent_on', { ascending: false }).order('created_at', { ascending: false });
   if (error) throw error;
   S.spendings = data;
+  // Separate pots are shown with their all-time totals, so load every row of those categories.
+  const potIds = S.categories.filter(c => c.kind !== 'household').map(c => c.id);
+  S.pots = [];
+  if (potIds.length) {
+    const pots = await sb.from('spendings').select('*').in('category_id', potIds).order('spent_on', { ascending: false });
+    if (pots.error) throw pots.error;
+    S.pots = pots.data;
+  }
 }
 
 // Remember "this word means this category" whenever someone overrides a suggestion.
@@ -285,13 +299,22 @@ function addForm() {
     save);
 }
 
+function potTag(s) {
+  const kind = catKind(s.category_id);
+  if (kind === 'receivable') return s.returned_on
+    ? h('span', { class: 'tag ok' }, 'visszakapva')
+    : h('span', { class: 'tag due' }, 'visszajár');
+  if (kind === 'separate') return h('span', { class: 'tag' }, 'külön kassza');
+  return null;
+}
+
 function spendingItem(s) {
   const who = member(s.created_by_email)?.display_name ?? s.created_by_email;
   return h('button', { class: 'item', onclick: () => openEdit(s) },
     catIcon(s.category_id),
     h('span', { class: 'item-main' },
       h('span', { class: 'desc' }, s.description),
-      h('span', { class: 'sub' }, `${catName(s.category_id)} · ${who}`)),
+      h('span', { class: 'sub' }, `${catName(s.category_id)} · ${who}`, potTag(s))),
     h('span', { class: 'amt num' }, money(s.amount)));
 }
 
@@ -304,9 +327,11 @@ function renderLog() {
       h('span', { class: 'num' }, money(sumOf(items)))),
     items.map(spendingItem),
   ]);
+  const household = S.spendings.filter(isHousehold), potMonth = S.spendings.filter(x => !isHousehold(x));
   return [addForm(), monthNav(),
     h('div', { class: 'strip-total' },
-      h('span', { class: 'muted' }, `${S.spendings.length} tétel`), h('strong', { class: 'num' }, money(sumOf(S.spendings)))),
+      h('span', { class: 'muted' }, `${household.length} tétel · háztartás`), h('strong', { class: 'num' }, money(sumOf(household)))),
+    potMonth.length ? h('div', { class: 'strip-note muted' }, `+ külön kassza ebben a hónapban: ${money(sumOf(potMonth))}`) : null,
     list.length ? list : h('p', { class: 'empty' }, 'Ebben a hónapban még nincs költés.')];
 }
 
@@ -321,34 +346,72 @@ function bars(groups) {
     h('span', { class: 'pct num' }, `${Math.round(g.sum / total * 100)}%`)));
 }
 
-function groupSum(key, describe) {
+function groupSum(key, describe, list = S.spendings) {
   const m = new Map();
-  for (const s of S.spendings) m.set(key(s), (m.get(key(s)) ?? 0) + Number(s.amount));
+  for (const s of list) m.set(key(s), (m.get(key(s)) ?? 0) + Number(s.amount));
   return [...m].map(([k, sum]) => ({ ...describe(k), sum })).sort((a, b) => b.sum - a.sum);
 }
 
+async function setReturned(s, returned) {
+  const { error } = await sb.from('spendings').update({ returned_on: returned ? localIso(new Date()) : null }).eq('id', s.id);
+  if (error) { logError('db write', error); toast(error.message); return false; }
+  toast(returned ? `Visszakaptad: ${s.description} — ${money(s.amount)}` : 'Újra kint lévőként jelölve');
+  await loadMonth(); render();
+  return true;
+}
+
+// Separate pots: this month and all-time per category; Visszajár shows what is still owed to you.
+function potsSection() {
+  const pots = S.categories.filter(c => c.kind !== 'household');
+  const monthOf = id => sumOf(S.spendings.filter(x => x.category_id === id));
+  const allOf = id => S.pots.filter(x => x.category_id === id);
+  const rows = pots.filter(c => allOf(c.id).length).map(c => {
+    const look = categoryLook(c.name), all = allOf(c.id);
+    const head = (label, value) => h('div', { class: 'pot-head' },
+      h('span', { class: 'cat-icon', style: `--cat:${look.color}` }, look.emoji),
+      h('span', { class: 'name' }, c.name),
+      h('span', { class: 'pot-sum' }, h('span', { class: 'muted' }, label), h('b', { class: 'num' }, money(value))));
+    if (c.kind === 'receivable') {
+      const open = all.filter(x => !x.returned_on);
+      return h('div', { class: 'pot' }, head('kint van ', sumOf(open)),
+        open.length
+          ? h('div', { class: 'pot-list' }, open.map(x => h('div', { class: 'pot-row' },
+              h('span', { class: 'grow pot-desc' }, h('span', {}, x.description), h('small', { class: 'muted' }, longDate(x.spent_on))),
+              h('span', { class: 'num' }, money(x.amount)),
+              h('button', { class: 'ghost small', onclick: () => setReturned(x, true) }, 'Visszakaptam'))))
+          : h('p', { class: 'muted pot-empty' }, 'Minden visszajött. 🎉'));
+    }
+    return h('div', { class: 'pot' }, head('ebben a hónapban ', monthOf(c.id)),
+      h('div', { class: 'pot-total muted' }, 'Összesen eddig: ', h('b', { class: 'num' }, money(sumOf(all)))));
+  });
+  return rows.length ? [h('h2', {}, 'Külön kassza'), h('p', { class: 'muted pot-note' }, 'Nem számít bele a háztartás havi összegébe.'),
+    h('div', { class: 'card' }, rows)] : null;
+}
+
 function renderMonth() {
-  if (!S.spendings.length) return [monthNav(), h('p', { class: 'empty' }, 'Ebben a hónapban még nincs költés.')];
-  const total = sumOf(S.spendings);
+  const household = S.spendings.filter(isHousehold);
+  if (!household.length) return [monthNav(), h('p', { class: 'empty' }, 'Ebben a hónapban még nincs háztartási költés.'), potsSection()];
+  const total = sumOf(household);
   const [y, m] = S.month.split('-').map(Number);
   const isCurrent = S.month === localIso(new Date()).slice(0, 7);
   const days = isCurrent ? new Date().getDate() : new Date(y, m, 0).getDate();
-  const byCategory = groupSum(s => s.category_id, id => ({ label: catName(id), ...categoryLook(catName(id)) }));
+  const byCategory = groupSum(s => s.category_id, id => ({ label: catName(id), ...categoryLook(catName(id)) }), household);
   const PERSON_COLORS = ['#3F9B6B', '#E0A43A', '#4C7FD1'];
   const people = groupSum(s => s.created_by_email.toLowerCase(), e => {
     const name = member(e)?.display_name ?? e;
     const i = [...new Set(S.members.map(x => x.display_name))].indexOf(name);
     return { label: name, emoji: name.slice(0, 2), color: PERSON_COLORS[Math.max(i, 0) % PERSON_COLORS.length] };
-  });
+  }, household);
   return [monthNav(),
     h('div', { class: 'hero' },
-      h('div', { class: 'label' }, 'Elköltve'),
+      h('div', { class: 'label' }, 'Háztartás · elköltve'),
       h('div', { class: 'big num' }, money(total)),
       h('div', { class: 'facts' },
-        h('span', {}, h('b', {}, String(S.spendings.length)), ' tétel'),
+        h('span', {}, h('b', {}, String(household.length)), ' tétel'),
         h('span', {}, 'napi átlag ', h('b', { class: 'num' }, money(total / days))))),
     h('h2', {}, 'Kategóriánként'), h('div', { class: 'card' }, bars(byCategory)),
-    h('h2', {}, 'Ki rögzítette'), h('div', { class: 'card' }, bars(people))];
+    h('h2', {}, 'Ki rögzítette'), h('div', { class: 'card' }, bars(people)),
+    potsSection()];
 }
 
 function renderImport() {
@@ -427,6 +490,13 @@ function openEdit(s) {
       h('div', {}, h('label', {}, 'Dátum'), date, dateHint(date)),
       h('div', { class: 'full' }, h('label', {}, 'Kategória'), cat)),
     h('p', { class: 'muted' }, `Rögzítette: ${member(s.created_by_email)?.display_name ?? s.created_by_email}`),
+    catKind(s.category_id) === 'receivable' ? h('div', { class: 'receivable-box' },
+      s.returned_on
+        ? [h('span', { class: 'grow' }, `✅ Visszakapva: ${longDate(s.returned_on)}`),
+           h('button', { class: 'ghost small', onclick: async () => { if (await setReturned(s, false)) dlg.close(); } }, 'Mégsem')]
+        : [h('span', { class: 'grow' }, '↩️ Ez a pénz még visszajár.'),
+           h('button', { class: 'primary small', onclick: async () => { if (await setReturned(s, true)) dlg.close(); } }, 'Visszakaptam')])
+      : null,
     h('div', { class: 'row' },
       h('button', { class: 'danger', onclick: remove }, 'Törlés'),
       h('span', { class: 'grow' }),
