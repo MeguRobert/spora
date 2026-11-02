@@ -14,6 +14,7 @@ const S = {
   month: localIso(new Date()).slice(0, 7),
   user: null, members: [], categories: [], rules: [], spendings: [],
   draft: newDraft(),
+  openGroups: new Set(),   // category rows dropped open in the month view
   importText: '', importRows: [],
 };
 
@@ -336,21 +337,45 @@ function renderLog() {
     list.length ? list : h('p', { class: 'empty' }, 'Ebben a hónapban még nincs költés.')];
 }
 
-function bars(groups) {
+// expandable: tapping a row drops down the items behind it (open rows survive re-renders via S.openGroups).
+function bars(groups, expandable = false) {
   const total = groups.reduce((a, g) => a + g.sum, 0) || 1;
   const max = Math.max(...groups.map(g => g.sum), 1);
-  return groups.map(g => h('div', { class: 'bar-row', style: `--cat:${g.color}` },
-    h('span', { class: 'cat-icon', style: `--cat:${g.color}` }, g.emoji),
-    h('span', { class: 'name' }, g.label),
-    h('span', { class: 'amt num' }, money(g.sum)),
-    h('div', { class: 'bar' }, h('span', { style: `width:${(g.sum / max * 100).toFixed(1)}%` })),
-    h('span', { class: 'pct num' }, `${Math.round(g.sum / total * 100)}%`)));
+  return groups.map(g => {
+    const row = h('div', { class: 'bar-row', style: `--cat:${g.color}` },
+      h('span', { class: 'cat-icon', style: `--cat:${g.color}` }, g.emoji),
+      h('span', { class: 'name' }, g.label),
+      h('span', { class: 'amt num' }, money(g.sum)),
+      h('div', { class: 'bar' }, h('span', { style: `width:${(g.sum / max * 100).toFixed(1)}%` })),
+      h('span', { class: 'pct num' }, `${Math.round(g.sum / total * 100)}%`));
+    if (!expandable) return row;
+    const items = [...g.items].sort((a, b) => b.spent_on.localeCompare(a.spent_on) || b.amount - a.amount);
+    return h('details', {
+      class: 'bar-drop', style: `--cat:${g.color}`, open: S.openGroups.has(g.key),
+      ontoggle: e => e.target.open ? S.openGroups.add(g.key) : S.openGroups.delete(g.key),
+    }, h('summary', {}, row),
+       h('div', { class: 'drop-items' }, items.map(dropItem)));
+  });
+}
+
+function dropItem(s) {
+  const who = member(s.created_by_email)?.display_name ?? s.created_by_email;
+  const day = new Date(s.spent_on + 'T00:00').toLocaleDateString('hu-HU', { month: 'short', day: 'numeric' });
+  return h('button', { class: 'drop-item', onclick: () => openEdit(s) },
+    h('span', { class: 'item-main' },
+      h('span', { class: 'desc' }, s.description),
+      h('span', { class: 'sub' }, `${day} · ${who}`, potTag(s))),
+    h('span', { class: 'amt num' }, money(s.amount)));
 }
 
 function groupSum(key, describe, list = S.spendings) {
   const m = new Map();
-  for (const s of list) m.set(key(s), (m.get(key(s)) ?? 0) + Number(s.amount));
-  return [...m].map(([k, sum]) => ({ ...describe(k), sum })).sort((a, b) => b.sum - a.sum);
+  for (const s of list) {
+    const g = m.get(key(s)) ?? m.set(key(s), { sum: 0, items: [] }).get(key(s));
+    g.sum += Number(s.amount);
+    g.items.push(s);
+  }
+  return [...m].map(([k, g]) => ({ ...describe(k), key: k, ...g })).sort((a, b) => b.sum - a.sum);
 }
 
 // ---------- month view: one "kassza" at a time ----------
@@ -371,7 +396,7 @@ const personLook = e => {
   const i = [...new Set(S.members.map(x => x.display_name))].indexOf(name);
   return { label: name, emoji: name.slice(0, 2), color: PERSON_COLORS[Math.max(i, 0) % PERSON_COLORS.length] };
 };
-const byCategoryBars = list => bars(groupSum(s => s.category_id, id => ({ label: catName(id), ...categoryLook(catName(id)) }), list));
+const byCategoryBars = list => bars(groupSum(s => s.category_id, id => ({ label: catName(id), ...categoryLook(catName(id)) }), list), true);
 const daysSoFar = () => {
   const [y, m] = S.month.split('-').map(Number);
   return S.month === localIso(new Date()).slice(0, 7) ? new Date().getDate() : new Date(y, m, 0).getDate();

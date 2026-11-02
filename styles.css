@@ -123,6 +123,23 @@ button:disabled { opacity: .45; cursor: default; }
 .bar { height: 7px; border-radius: 4px; background: var(--bar-track); overflow: hidden; }
 .bar > span { display: block; height: 100%; border-radius: 4px; background: var(--cat, var(--brand)); }
 
+/* category rows that drop down their items */
+.bar-drop > summary { list-style: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.bar-drop > summary::-webkit-details-marker { display: none; }
+.bar-drop > summary .amt::after {
+  content: "›"; display: inline-block; margin-left: 6px; color: var(--muted); font-weight: 400;
+  transform: rotate(90deg); transition: transform .15s;
+}
+.bar-drop[open] > summary .amt::after { transform: rotate(-90deg); }
+.drop-items { margin: -4px 0 14px 44px; padding-left: 10px; border-left: 2px solid color-mix(in srgb, var(--cat) 45%, transparent); }
+.drop-item {
+  display: flex; gap: 10px; align-items: center; width: 100%; text-align: left; padding: 7px 0;
+  background: none; border: 0; border-bottom: 1px solid var(--line); color: inherit; font: inherit; cursor: pointer;
+}
+.drop-item:last-child { border-bottom: 0; }
+.drop-item .item-main .desc { font-weight: 500; font-size: 15px; }
+.drop-item .amt { font-size: 14px; font-weight: 600; white-space: nowrap; }
+
 /* ---------- import ---------- */
 .import-row { display: grid; grid-template-columns: auto 1fr 90px; gap: 6px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
 .import-row .sub { grid-column: 2 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; align-items: start; }
