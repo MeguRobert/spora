@@ -14,7 +14,7 @@ Fix a wrong category once and the app remembers that word next time.
 |---|---|
 | App | https://megurobert.github.io/spora/ — GitHub Pages from `main` (root). **Pushing `main` deploys.** |
 | Database | Supabase project `spora` (ref `eyzbdakkalbckoaaxvzj`, Frankfurt, free tier) |
-| Schema | Applied in order: `supabase/schema.sql`, `push.sql`, `logs.sql`, `2026-10-26-categories.sql` (category kinds: household / separate pot / Visszajár). Re-running fails on existing objects. |
+| Schema | Applied in order: `supabase/schema.sql`, `push.sql`, `logs.sql`, `2026-10-26-categories.sql` (category kinds: household / separate pot / Visszajár), `2026-11-02-megtakaritas-kozlekedes.sql`. Re-running fails on existing objects. |
 | Keepalive | `.github/workflows/supabase-keepalive.yml` calls `ping()` daily so the free project never pauses (secrets `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`) |
 | Repo | `MeguRobert/spora` — personal account; this clone uses `~/.ssh/id_ed25519_meguRobert` via `core.sshCommand` |
 | Reminders | Push at 10:00 and 22:00 Bucharest time: pg_cron job `spora-daily-reminder` (07,08,19,20 UTC) → edge function `supabase/functions/daily-reminder` → every row in `push_subscriptions`. Function secrets: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `CRON_SECRET`. Setup SQL: `supabase/push.sql` |

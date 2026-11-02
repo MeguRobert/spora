@@ -28,6 +28,7 @@ const CATEGORY_LOOK = {
   'Élelmiszer':           ['🛒', '#3F9B6B'],
   'Üzemanyag':            ['⛽', '#D9822B'],
   'Autó':                 ['🚗', '#4C7FD1'],
+  'Közlekedés':           ['🚌', '#2E9C8F'],
   'Ház & rezsi':          ['🏠', '#8B6BD1'],
   'Egészség':             ['💊', '#D9536F'],
   'Ruházat':              ['👕', '#4FA3D1'],
@@ -44,6 +45,7 @@ const CATEGORY_LOOK = {
   'APPROB SRL':           ['💼', '#3D5A80'],
   'Házépítés':            ['🧱', '#B5643C'],
   'Visszajár':            ['↩️', '#E0A43A'],
+  'Megtakarítás':         ['💰', '#3F8F5A'],
   'Egyéb':                ['✳️', '#8A8F8C'],
 };
 export const categoryLook = name => {
