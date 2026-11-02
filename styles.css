@@ -257,3 +257,5 @@ button.small { padding: 6px 10px; font-size: 13px; border-radius: 10px; }
 .card.faded { opacity: .75; }
 .card .pot-row:first-child { padding-top: 0; }
 .card .pot-row:last-child { padding-bottom: 0; }
+.paste-btn { margin: 4px 0 10px; font-size: 16px; }
+.receipt-text { min-height: 90px; }

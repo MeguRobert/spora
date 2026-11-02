@@ -557,8 +557,17 @@ function renderImport() {
 const RECEIPT_HOWTO = [
   'Fotózd le a blokkot a telefon kamerájával.',
   'Android: a fotón nyomd meg a Lens gombot → Szöveg → Az összes kijelölése → Másolás. iPhone: a fotón nyomd meg a szövegfelismerés gombot (▤) → Az összes kijelölése → Másolás.',
-  'Illeszd be ide, és nyomd meg a Feldolgozás gombot.',
+  'Nyisd meg a Spórát, és nyomd meg a Beillesztés gombot.',
 ];
+
+// One tap: read what the phone's text recognition just copied and go straight to the check.
+async function pasteReceipt() {
+  let text = '';
+  try { text = await navigator.clipboard.readText(); }
+  catch (e) { log('receipt', 'clipboard read failed', { error: e?.message ?? String(e) }); }
+  if (!text.trim()) { toast('A vágólap üres, vagy nem olvasható. Tartsd nyomva a mezőt, és válaszd a Beillesztést.', 3500); return; }
+  startReceipt(text);
+}
 
 function startReceipt(text) {
   const p = parseReceipt(text);
@@ -577,13 +586,16 @@ function startReceipt(text) {
 function renderReceipt() {
   const r = S.receipt;
   if (!r) {
-    const area = h('textarea', { class: 'receipt-text', placeholder: 'Ide illeszd be a blokk szövegét…' });
+    const area = h('textarea', { class: 'receipt-text', placeholder: 'Vagy illeszd be ide kézzel…' });
+    // A paste into the box is processed right away; typing still waits for Feldolgozás.
+    area.onpaste = () => setTimeout(() => startReceipt(area.value), 0);
     return h('div', { class: 'card' },
       h('p', { class: 'card-title' }, 'Blokk beolvasása'),
       h('ol', { class: 'howto' }, RECEIPT_HOWTO.map(s => h('li', {}, s))),
+      h('button', { class: 'primary block paste-btn', onclick: pasteReceipt }, '📋 Beillesztés'),
       area,
       h('div', { class: 'row', style: 'margin-top:8px' },
-        h('button', { class: 'primary', onclick: () => startReceipt(area.value) }, 'Feldolgozás')));
+        h('button', { class: 'ghost', onclick: () => startReceipt(area.value) }, 'Feldolgozás')));
   }
 
   const sum = () => Math.round(r.items.reduce((a, i) => a + (Number(i.amount) || 0), 0) * 100) / 100;
