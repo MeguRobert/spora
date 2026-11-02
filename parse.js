@@ -153,3 +153,90 @@ export function suggestCategory(description, rules) {
 export function ruleKeyword(description) {
   return normalize(description).split(/[^a-z0-9]+/).find(w => w.length >= 3 && !/^\d+$/.test(w)) ?? null;
 }
+
+// ---------- receipts (Romanian "bon fiscal") ----------
+// The text comes from the phone's own "copy text from photo" (Google Lens, iPhone Live Text).
+// A product is a quantity line ("1,000 Buc x 14,49" / "0,214 Kg x 51,00") followed by its name,
+// usually with the line price and VAT letter at the end ("SMANTANA 12%GR 850G 14,49 B").
+// The price is recomputed from quantity x unit price, so it survives a phone that copies the
+// price column apart from the names. "REDUCERE …" / "DISCOUNT 2,00-A" lower the product above.
+
+const QTY_LINE = /^(\d+(?:[.,]\d{1,3})?)\s*([a-z]{1,4})?\.?\s*[x×*]\s*(\d+[.,]\d{2})\b/i;
+const PRICE_TAIL = /\s+(\d{1,5}[.,]\d{2})\s*(-)?\s*([a-g])?\s*$/i;
+const ONLY_AMOUNT = /^-?\s*(\d{1,5}[.,]\d{2})\s*-?\s*[a-g]?$/i;
+const round2 = n => Math.round(n * 100) / 100;
+const capitalize = s => s.charAt(0).toUpperCase() + s.slice(1);
+
+function receiptDate(text) {
+  const m = text.match(/data\s*:?\s*(\d{2})[/.-](\d{2})[/.-](\d{4})/i) ?? text.match(/\b(\d{2})[/.-](\d{2})[/.-](\d{4})\b/);
+  return m ? isoDate(+m[3], +m[2] - 1, +m[1]) : null;
+}
+
+function receiptStore(lines) {
+  const first = lines.find(l => (l.match(/[a-z]/gi) ?? []).length >= 3);
+  if (!first) return null;
+  const name = first.replace(/[\s,]+(s\.?\s?r\.?\s?l\.?|s\.?\s?a\.?)\s*$/i, '').trim().toLowerCase();
+  return name.split(/\s+/).map(capitalize).join(' ');
+}
+
+/**
+ * Parse the copied text of a receipt.
+ * → { store, date, total, items: [{ name, qty, unit, amount, discount }], sum, matches }
+ * `amount` is what the product cost after its discount; `matches` says the items add up to TOTAL.
+ */
+export function parseReceipt(text) {
+  const lines = text.split(/\r?\n/).map(l => l.trim().replace(/\s{2,}/g, ' ')).filter(Boolean);
+  const items = [];
+  let pending = null, awaitingDiscount = false, total = null, awaitingTotal = false, inItems = true;
+
+  for (const line of lines) {
+    if (awaitingTotal) {
+      const m = line.match(ONLY_AMOUNT);
+      if (m) { total = parseAmount(m[1]); awaitingTotal = false; continue; }
+    }
+    if (/^total\b(?!\s*tva)/i.test(line)) {
+      inItems = false;
+      const m = line.match(/(\d{1,5}[.,]\d{2})\s*$/);
+      if (m) total = parseAmount(m[1]); else awaitingTotal = true;
+      continue;
+    }
+    if (/^sub\s*total\b/i.test(line)) { inItems = false; continue; }
+    if (!inItems) continue;
+
+    const qty = line.match(QTY_LINE);
+    if (qty) { pending = { qty: Number(qty[1].replace(',', '.')), unit: (qty[2] ?? '').toLowerCase(), price: parseAmount(qty[3]) }; continue; }
+
+    const tail = line.match(PRICE_TAIL);
+    if (/^(reducere|discount)\b/i.test(line)) {
+      const last = items[items.length - 1];
+      if (tail && last) { last.discount = round2(last.discount + parseAmount(tail[1])); awaitingDiscount = false; }
+      else awaitingDiscount = !!last;
+      continue;
+    }
+    if (ONLY_AMOUNT.test(line)) {
+      // A lone discount amount right after "REDUCERE …"; any other lone price belongs to a column
+      // the quantity line already covered.
+      const last = items[items.length - 1];
+      if (awaitingDiscount && last && /-/.test(line)) { last.discount = round2(last.discount + parseAmount(line.match(ONLY_AMOUNT)[1])); }
+      awaitingDiscount = false;
+      continue;
+    }
+    if ((line.match(/[a-z]/gi) ?? []).length < 2 || (!pending && !tail)) continue;
+
+    const name = capitalize((tail ? line.slice(0, tail.index) : line).trim().toLowerCase());
+    const computed = pending ? round2(pending.qty * pending.price) : null;
+    const printed = tail ? parseAmount(tail[1]) : null;
+    const price = computed != null && (printed == null || Math.abs(printed - computed) > 0.02) ? computed : printed;
+    items.push({ name, qty: pending?.qty ?? 1, unit: pending?.unit ?? '', price, discount: 0 });
+    pending = null; awaitingDiscount = false;
+  }
+
+  const out = items.map(({ price, ...i }) => ({ ...i, amount: round2(price - i.discount) }));
+  const sum = round2(out.reduce((a, i) => a + i.amount, 0));
+  return {
+    store: out.length ? receiptStore(lines) : null,
+    date: receiptDate(text),
+    total, items: out, sum,
+    matches: total != null && out.length > 0 && Math.abs(sum - total) < 0.01,
+  };
+}

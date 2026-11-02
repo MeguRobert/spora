@@ -146,6 +146,36 @@ button:disabled { opacity: .45; cursor: default; }
 .import-row input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--brand); }
 .import-row .src { grid-column: 2 / -1; font-size: 12px; color: var(--muted); }
 
+.segmented { display: flex; gap: 4px; padding: 4px; margin-bottom: 12px; background: var(--field); border: 1px solid var(--line); border-radius: 14px; }
+.segmented button { flex: 1; padding: 9px 10px; background: none; border-radius: 10px; color: var(--muted); font-weight: 600; }
+.segmented button.on { background: var(--card); color: var(--text); box-shadow: var(--shadow); }
+
+/* ---------- receipt ---------- */
+.card-head { display: flex; justify-content: space-between; align-items: baseline; }
+.card-head .card-title { margin: 0 0 8px; }
+.receipt-link { padding: 0 0 8px; font-size: 14px; font-weight: 600; }
+.howto { margin: 0 0 10px; padding-left: 20px; color: var(--muted); font-size: 14px; }
+.howto li { margin: 4px 0; }
+.receipt-check { margin-top: 10px; padding: 10px 12px; border-radius: 12px; font-size: 14px; font-weight: 600; }
+.receipt-check.ok { background: color-mix(in srgb, var(--brand-2) 16%, transparent); color: var(--brand); }
+.receipt-check.off { background: color-mix(in srgb, var(--honey) 20%, transparent); color: var(--honey-deep); }
+.small-note { font-size: 13px; margin: -2px 0 6px; }
+.receipt-item { display: grid; grid-template-columns: 1fr 82px auto auto; gap: 6px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+.receipt-item .r-amt { text-align: right; }
+.receipt-item .r-sub { grid-column: 1 / -1; display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: center; }
+.receipt-item .r-sub:not(:has(span)) { grid-template-columns: 1fr; }
+.receipt-item .r-del { font-size: 20px; line-height: 1; padding: 6px 8px; }
+.star { background: none; padding: 6px; font-size: 18px; filter: grayscale(1); opacity: .35; border-radius: 10px; }
+.star.on { filter: none; opacity: 1; background: color-mix(in srgb, var(--honey) 18%, transparent); }
+.r-group { display: flex; gap: 10px; align-items: center; padding: 6px 0; }
+.r-group .cat-icon { width: 30px; height: 30px; font-size: 15px; border-radius: 9px; }
+.products { margin: 4px 0 12px; padding: 10px 12px; background: var(--field); border-radius: 12px; }
+.product { display: flex; gap: 8px; align-items: center; padding: 4px 0; font-size: 15px; }
+.product .star { padding: 2px 4px; font-size: 16px; }
+.products-note { color: var(--muted); }
+.skip-total { display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 6px; }
+.skip-total b { font-family: "Fraunces", Georgia, serif; font-size: 20px; }
+
 /* ---------- chrome ---------- */
 nav.tabs {
   position: fixed; left: 0; right: 0; bottom: 0; display: flex; justify-content: center;

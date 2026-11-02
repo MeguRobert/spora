@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
-import { parseEntry, parseChat, parseAmount, suggestCategory, ruleKeyword, localIso } from './parse.js';
+import { parseEntry, parseChat, parseAmount, suggestCategory, ruleKeyword, localIso, parseReceipt } from './parse.js';
 import { LOGO, ICONS, categoryLook, svg } from './brand.js';
 import { registerWorker, currentSubscription, enablePush, disablePush, pushBlocker } from './push.js';
 import { initLogging, logError, log, environment } from './log.js';
@@ -16,6 +16,10 @@ const S = {
   draft: newDraft(),
   openGroups: new Set(),   // category rows dropped open in the month view
   importText: '', importRows: [],
+  importMode: 'receipt',       // Import tab: 'receipt' (a pasted receipt) or 'chat' (Messenger lines)
+  receipt: null,               // { text, store, date, total, items: [...] } while a receipt is being checked
+  items: new Map(),            // spending id → its products (from a receipt), for the loaded month
+  skipRules: new Set(),        // keywords of products once marked "elhagyható"
 };
 
 function newDraft() { return { text: '', amount: null, date: null, cat: null }; }
@@ -154,13 +158,15 @@ function shiftMonth(delta) {
 
 // ---------- data ----------
 async function loadRefs() {
-  const [cats, rules, members] = await Promise.all([
+  const [cats, rules, members, skips] = await Promise.all([
     sb.from('categories').select('id,name,kind').order('sort').order('name'),
     sb.from('category_rules').select('keyword,category_id'),
     sb.from('allowed_emails').select('email,display_name'),
+    sb.from('skip_rules').select('keyword'),
   ]);
-  for (const r of [cats, rules, members]) if (r.error) throw r.error;
+  for (const r of [cats, rules, members, skips]) if (r.error) throw r.error;
   S.categories = cats.data; S.rules = rules.data; S.members = members.data;
+  S.skipRules = new Set(skips.data.map(r => r.keyword));
 }
 
 async function loadMonth() {
@@ -170,6 +176,13 @@ async function loadMonth() {
     .order('spent_on', { ascending: false }).order('created_at', { ascending: false });
   if (error) throw error;
   S.spendings = data;
+  // Products behind the month's receipt entries.
+  S.items = new Map();
+  if (data.length) {
+    const items = await sb.from('spending_items').select('*').in('spending_id', data.map(s => s.id)).order('sort');
+    if (items.error) throw items.error;
+    for (const i of items.data) (S.items.get(i.spending_id) ?? S.items.set(i.spending_id, []).get(i.spending_id)).push(i);
+  }
   // Separate pots are shown with their all-time totals, so load every row of those categories.
   const potIds = S.categories.filter(c => c.kind !== 'household').map(c => c.id);
   S.pots = [];
@@ -188,6 +201,25 @@ async function learn(description, categoryId, suggestedId) {
   const { error } = await sb.from('category_rules').upsert({ keyword, category_id: categoryId });
   if (error) return console.warn(error);
   S.rules = [...S.rules.filter(r => r.keyword !== keyword), { keyword, category_id: categoryId }];
+}
+
+// "Elhagyható" is remembered per product word too, both ways: marking teaches it, unmarking forgets it.
+const suggestSkip = name => S.skipRules.has(ruleKeyword(name));
+async function learnSkip(name, skippable) {
+  const keyword = ruleKeyword(name);
+  if (!keyword || S.skipRules.has(keyword) === skippable) return;
+  const { error } = skippable
+    ? await sb.from('skip_rules').upsert({ keyword })
+    : await sb.from('skip_rules').delete().eq('keyword', keyword);
+  if (error) return console.warn(error);
+  if (skippable) S.skipRules.add(keyword); else S.skipRules.delete(keyword);
+}
+
+async function setSkippable(item, skippable) {
+  const { error } = await sb.from('spending_items').update({ skippable }).eq('id', item.id);
+  if (error) { logError('db write', error); toast(error.message); return; }
+  item.skippable = skippable;
+  await learnSkip(item.name, skippable);
 }
 
 // ---------- screens ----------
@@ -293,7 +325,8 @@ function addForm() {
   };
   sync();
 
-  return h('div', { class: 'card' }, h('p', { class: 'card-title' }, 'Mit vettél?'), quick,
+  const receipt = h('button', { class: 'link receipt-link', onclick: () => { S.tab = 'import'; S.importMode = 'receipt'; render(); } }, '🧾 Blokk beolvasása');
+  return h('div', { class: 'card' }, h('div', { class: 'card-head' }, h('p', { class: 'card-title' }, 'Mit vettél?'), receipt), quick,
     h('div', { class: 'fields' },
       h('div', {}, h('label', {}, 'Összeg (lei)'), amount),
       h('div', {}, h('label', {}, 'Dátum'), date, dHint),
@@ -310,13 +343,20 @@ function potTag(s) {
   return null;
 }
 
+// "· 6 termék" on a receipt entry, with a star when some of it was marked elhagyható.
+function productsNote(s) {
+  const items = S.items.get(s.id);
+  if (!items?.length) return null;
+  return h('span', { class: 'products-note' }, ` · ${items.length} termék`, items.some(i => i.skippable) ? ' ⭐' : '');
+}
+
 function spendingItem(s) {
   const who = member(s.created_by_email)?.display_name ?? s.created_by_email;
   return h('button', { class: 'item', onclick: () => openEdit(s) },
     catIcon(s.category_id),
     h('span', { class: 'item-main' },
       h('span', { class: 'desc' }, s.description),
-      h('span', { class: 'sub' }, `${catName(s.category_id)} · ${who}`, potTag(s))),
+      h('span', { class: 'sub' }, `${catName(s.category_id)} · ${who}`, productsNote(s), potTag(s))),
     h('span', { class: 'amt num' }, money(s.amount)));
 }
 
@@ -364,7 +404,7 @@ function dropItem(s) {
   return h('button', { class: 'drop-item', onclick: () => openEdit(s) },
     h('span', { class: 'item-main' },
       h('span', { class: 'desc' }, s.description),
-      h('span', { class: 'sub' }, `${day} · ${who}`, potTag(s))),
+      h('span', { class: 'sub' }, `${day} · ${who}`, productsNote(s), potTag(s))),
     h('span', { class: 'amt num' }, money(s.amount)));
 }
 
@@ -441,7 +481,23 @@ function viewAll() {
   ].filter(k => k.sum > 0).sort((a, b) => b.sum - a.sum);
   return [hero('Összes kiadás', sumOf(S.spendings), fact('', String(S.spendings.length), ' tétel')),
     h('h2', {}, 'Kasszánként'), h('div', { class: 'card' }, bars(kasszak)),
-    h('h2', {}, 'Kategóriánként'), h('div', { class: 'card' }, byCategoryBars(S.spendings))];
+    h('h2', {}, 'Kategóriánként'), h('div', { class: 'card' }, byCategoryBars(S.spendings)),
+    skippableSection(S.spendings)];
+}
+
+// Products marked "elhagyható" on this month's receipts: what could have been left on the shelf.
+function skippableSection(list) {
+  const rows = list.flatMap(s => (S.items.get(s.id) ?? []).filter(i => i.skippable).map(i => ({ i, s })));
+  if (!rows.length) return null;
+  const total = rows.reduce((a, r) => a + Number(r.i.amount), 0);
+  const day = iso => new Date(iso + 'T00:00').toLocaleDateString('hu-HU', { month: 'short', day: 'numeric' });
+  return [h('h2', {}, '⭐ Elhagyható'),
+    h('div', { class: 'card skip-card' },
+      h('div', { class: 'skip-total' }, h('span', { class: 'muted' }, 'Ebben a hónapban'), h('b', { class: 'num' }, money(total))),
+      rows.map(({ i, s }) => h('button', { class: 'drop-item', onclick: () => openEdit(s) },
+        h('span', { class: 'item-main' }, h('span', { class: 'desc' }, i.name),
+          h('span', { class: 'sub' }, `${s.description} · ${day(s.spent_on)}`)),
+        h('span', { class: 'amt num' }, money(i.amount)))))];
 }
 
 function viewHousehold() {
@@ -451,7 +507,8 @@ function viewHousehold() {
   return [hero('Háztartás · elköltve', total,
       fact('', String(household.length), ' tétel'), fact('napi átlag ', money(total / daysSoFar()))),
     h('h2', {}, 'Kategóriánként'), h('div', { class: 'card' }, byCategoryBars(household)),
-    h('h2', {}, 'Ki rögzítette'), h('div', { class: 'card' }, bars(groupSum(s => s.created_by_email.toLowerCase(), personLook, household)))];
+    h('h2', {}, 'Ki rögzítette'), h('div', { class: 'card' }, bars(groupSum(s => s.created_by_email.toLowerCase(), personLook, household))),
+    skippableSection(household)];
 }
 
 function viewPot(c) {
@@ -490,6 +547,139 @@ function renderMonth() {
 }
 
 function renderImport() {
+  const mode = (id, label) => h('button', { class: S.importMode === id ? 'on' : '', 'aria-pressed': S.importMode === id ? 'true' : 'false',
+    onclick: () => { S.importMode = id; render(); } }, label);
+  return [h('div', { class: 'segmented' }, mode('receipt', '🧾 Blokk'), mode('chat', '💬 Messenger')),
+    S.importMode === 'receipt' ? renderReceipt() : renderChatImport()];
+}
+
+// ---------- receipt: paste the copied text, check every product, save one entry per category ----------
+const RECEIPT_HOWTO = [
+  'Fotózd le a blokkot a telefon kamerájával.',
+  'Android: a fotón nyomd meg a Lens gombot → Szöveg → Az összes kijelölése → Másolás. iPhone: a fotón nyomd meg a szövegfelismerés gombot (▤) → Az összes kijelölése → Másolás.',
+  'Illeszd be ide, és nyomd meg a Feldolgozás gombot.',
+];
+
+function startReceipt(text) {
+  const p = parseReceipt(text);
+  if (!p.items.length) { toast('Nem találtam termékeket ebben a szövegben'); return; }
+  const storeCat = suggestCategory(p.store ?? '', S.rules);
+  S.receipt = {
+    text, store: p.store ?? '', date: p.date ?? localIso(new Date()), total: p.total,
+    items: p.items.map(i => {
+      const category_id = suggestCategory(i.name, S.rules) ?? storeCat;
+      return { ...i, category_id, suggested: category_id, skippable: suggestSkip(i.name) };
+    }),
+  };
+  render();
+}
+
+function renderReceipt() {
+  const r = S.receipt;
+  if (!r) {
+    const area = h('textarea', { class: 'receipt-text', placeholder: 'Ide illeszd be a blokk szövegét…' });
+    return h('div', { class: 'card' },
+      h('p', { class: 'card-title' }, 'Blokk beolvasása'),
+      h('ol', { class: 'howto' }, RECEIPT_HOWTO.map(s => h('li', {}, s))),
+      area,
+      h('div', { class: 'row', style: 'margin-top:8px' },
+        h('button', { class: 'primary', onclick: () => startReceipt(area.value) }, 'Feldolgozás')));
+  }
+
+  const sum = () => Math.round(r.items.reduce((a, i) => a + (Number(i.amount) || 0), 0) * 100) / 100;
+  const check = h('div', { class: 'receipt-check' });
+  const groupsEl = h('div', {});
+  const refreshCheck = () => {
+    groupsEl.replaceChildren(...preview());
+    const s = sum();
+    const ok = r.total != null && Math.abs(s - r.total) < 0.01;
+    check.className = 'receipt-check ' + (ok ? 'ok' : 'off');
+    check.textContent = r.total == null ? `Termékek összesen: ${money(s)} (a blokk végösszegét nem találtam)`
+      : ok ? `✅ Egyezik a blokkal: ${money(s)}`
+      : `⚠️ A termékek összege ${money(s)}, a blokkon ${money(r.total)}. Nézd át az árakat!`;
+  };
+
+  const store = h('input', { value: r.store, placeholder: 'Bolt', oninput: e => { r.store = e.target.value; } });
+  const date = h('input', { type: 'date', value: r.date, oninput: e => { r.date = e.target.value; } });
+  const rows = r.items.map(i => {
+    const cat = categorySelect(i.category_id);
+    cat.onchange = () => { i.category_id = toId(cat.value); refreshCheck(); };
+    const star = h('button', {
+      class: 'star' + (i.skippable ? ' on' : ''), title: 'Elhagyható', 'aria-label': 'Elhagyható', 'aria-pressed': i.skippable ? 'true' : 'false',
+      onclick: () => { i.skippable = !i.skippable; star.classList.toggle('on', i.skippable); star.setAttribute('aria-pressed', String(i.skippable)); },
+    }, '⭐');
+    return h('div', { class: 'receipt-item' },
+      h('input', { class: 'r-name', value: i.name, oninput: e => { i.name = e.target.value; } }),
+      h('input', { class: 'r-amt', inputmode: 'decimal', value: amountText(i.amount),
+        oninput: e => { i.amount = parseAmount(e.target.value); refreshCheck(); } }),
+      star,
+      h('button', { class: 'icon-btn r-del', title: 'Törlés', 'aria-label': 'Termék törlése',
+        onclick: () => { r.items.splice(r.items.indexOf(i), 1); render(); } }, '×'),
+      h('div', { class: 'r-sub' }, i.discount ? h('span', { class: 'muted' }, `kedvezmény −${money(i.discount)}`) : null, cat));
+  });
+
+  const save = async () => {
+    const items = r.items.filter(i => i.name.trim());
+    if (!r.store.trim()) { toast('Írd be a bolt nevét'); return; }
+    if (!items.length) { toast('Nincs termék'); return; }
+    if (items.some(i => !(i.amount >= 0) || i.amount == null)) { toast('Minden terméknek kell ár'); return; }
+    if (items.some(i => !i.category_id)) { toast('Válassz kategóriát minden termékhez'); return; }
+    // One spending per category, the products underneath it.
+    const groups = new Map();
+    for (const i of items) (groups.get(i.category_id) ?? groups.set(i.category_id, []).get(i.category_id)).push(i);
+    const spendings = [...groups].map(([category_id, list]) => ({
+      id: crypto.randomUUID(), description: r.store.trim(), spent_on: r.date, category_id,
+      amount: Math.round(list.reduce((a, i) => a + i.amount, 0) * 100) / 100,
+    })).filter(s => s.amount > 0);
+    const byCat = new Map(spendings.map(s => [s.category_id, s.id]));
+    const rowsOut = items.filter(i => byCat.has(i.category_id)).map((i, n) => ({
+      spending_id: byCat.get(i.category_id), name: i.name.trim(), amount: i.amount, qty: i.qty ?? 1, skippable: i.skippable, sort: n,
+    }));
+    let { error } = await sb.from('spendings').insert(spendings);
+    if (!error) ({ error } = await sb.from('spending_items').insert(rowsOut));
+    if (error) { logError('db write', error); toast(error.message); return; }
+    for (const i of items) await learn(i.name, i.category_id, i.suggested);
+    // One star among two Poiana bars ("2 csoki 1 helyett") still marks "poiana": a word is elhagyható
+    // when any of its products on this receipt is.
+    const skipByWord = new Map();
+    for (const i of items) { const k = ruleKeyword(i.name); if (k) skipByWord.set(k, skipByWord.get(k) || i.skippable); }
+    for (const [k, skippable] of skipByWord) await learnSkip(k, skippable);
+    toast(`Mentve: ${r.store.trim()} — ${money(sum())}` + (spendings.length > 1 ? ` (${spendings.length} kategória)` : ''));
+    S.receipt = null;
+    S.month = r.date.slice(0, 7);
+    S.tab = 'log';
+    await loadMonth();
+    render();
+  };
+
+  // What will be saved: one line per category.
+  const preview = () => {
+    const m = new Map();
+    for (const i of r.items) m.set(i.category_id, (m.get(i.category_id) ?? 0) + (Number(i.amount) || 0));
+    return [...m].map(([id, v]) => h('div', { class: 'r-group' }, catIcon(id), h('span', { class: 'grow' }, catName(id)), h('b', { class: 'num' }, money(v))));
+  };
+  refreshCheck();
+
+  return [h('div', { class: 'card' },
+      h('div', { class: 'fields' },
+        h('div', {}, h('label', {}, 'Bolt'), store),
+        h('div', {}, h('label', {}, 'Dátum'), date, dateHint(date))),
+      check),
+    h('div', { class: 'card', style: 'margin-top:12px' },
+      h('p', { class: 'card-title' }, `Termékek (${r.items.length})`),
+      h('p', { class: 'muted small-note' }, '⭐ = elhagyható: amit legközelebb akár ki is hagyhatnál. A Spóra megjegyzi.'),
+      rows,
+      h('button', { class: 'ghost small', onclick: () => { r.items.push({ name: '', amount: null, qty: 1, discount: 0, category_id: r.items.at(-1)?.category_id ?? null, suggested: null, skippable: false }); render(); } }, '+ termék')),
+    h('div', { class: 'card', style: 'margin-top:12px' },
+      h('p', { class: 'card-title' }, 'Így kerül a Naplóba'),
+      groupsEl,
+      h('div', { class: 'row', style: 'margin-top:10px' },
+        h('button', { onclick: () => { if (confirm('Eldobod ezt a blokkot?')) { S.receipt = null; render(); } } }, 'Mégse'),
+        h('span', { class: 'grow' }),
+        h('button', { class: 'primary', onclick: save }, 'Mentés')))];
+}
+
+function renderChatImport() {
   const area = h('textarea', { placeholder: 'Másold ide a Messenger üzeneteket, soronként egy költés…', value: S.importText });
   area.oninput = () => { S.importText = area.value; };
   const parse = () => {
@@ -536,6 +726,26 @@ function renderImport() {
       rows) : null];
 }
 
+// The products behind a receipt entry; the star marks one "elhagyható" right here.
+function productList(s) {
+  const items = S.items.get(s.id);
+  if (!items?.length) return null;
+  return h('div', { class: 'products' },
+    h('p', { class: 'card-title' }, `Termékek (${items.length})`),
+    items.map(i => {
+      const star = h('button', {
+        class: 'star' + (i.skippable ? ' on' : ''), title: 'Elhagyható', 'aria-label': `Elhagyható: ${i.name}`,
+        'aria-pressed': i.skippable ? 'true' : 'false',
+        onclick: async () => {
+          await setSkippable(i, !i.skippable);
+          star.classList.toggle('on', i.skippable); star.setAttribute('aria-pressed', String(i.skippable));
+          render();
+        },
+      }, '⭐');
+      return h('div', { class: 'product' }, h('span', { class: 'grow' }, i.name), h('span', { class: 'num' }, money(i.amount)), star);
+    }));
+}
+
 function openEdit(s) {
   const desc = h('input', { value: s.description });
   const amt = h('input', { inputmode: 'decimal', value: amountText(s.amount) });
@@ -565,6 +775,7 @@ function openEdit(s) {
       h('div', {}, h('label', {}, 'Dátum'), date, dateHint(date)),
       h('div', { class: 'full' }, h('label', {}, 'Kategória'), cat)),
     h('p', { class: 'muted' }, `Rögzítette: ${member(s.created_by_email)?.display_name ?? s.created_by_email}`),
+    productList(s),
     catKind(s.category_id) === 'receivable' ? h('div', { class: 'receivable-box' },
       s.returned_on
         ? [h('span', { class: 'grow' }, `✅ Visszakapva: ${longDate(s.returned_on)}`),
